@@ -1,4 +1,4 @@
-# MDVSocial 1.2.0
+# MDVSocial 1.2.1
 
 Plugin social modular para MDVCRAFT.
 

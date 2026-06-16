@@ -24,6 +24,7 @@ items:
       - ''
       - '&eClick para comenzar.'
     action: START_MAIL_SEND
+    close-on-click: true
 
   bloquear:
     slot: 15
@@ -36,6 +37,7 @@ items:
       - ''
       - '&eClick para escribir su nombre.'
     action: START_MAIL_BLOCK
+    close-on-click: true
 
   desbloquear:
     slot: 16
@@ -48,6 +50,7 @@ items:
       - ''
       - '&eClick para escribir su nombre.'
     action: START_MAIL_UNBLOCK
+    close-on-click: true
 
   volver:
     slot: 22

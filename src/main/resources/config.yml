@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.2.0
+# MDVSocial 1.2.1
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -32,6 +32,7 @@ messages:
   mail-sent: '&aCarta enviada a &e{target}&a.'
   mail-received: '&eHas recibido una carta nueva de &a{sender}&e. Usa &a/correo &epara leerla.'
   mail-player-not-found: '&cNo encontre ese jugador. Debe haber entrado al servidor al menos una vez.'
+  mail-player-not-found-suggestions: '&cNo encontre ese jugador. &7Quizas quisiste decir: &e{suggestions}&7.'
   mail-self: '&cNo puedes enviarte una carta a ti mismo.'
   mail-self-block: '&cNo puedes bloquearte a ti mismo.'
   mail-empty: '&cLa carta no puede estar vacia.'
@@ -43,6 +44,7 @@ messages:
   mail-blocked: '&eBloqueaste las cartas de &c{target}&e.'
   mail-unblocked: '&aDesbloqueaste las cartas de &e{target}&a.'
   mail-not-blocked: '&e{target} &7no estaba bloqueado.'
+  mail-broadcast-sent: '&aCarta del servidor enviada a &e{sent} &ajugadores. &7Omitidos: &e{skipped}&7.'
 
 settings:
   # Menu inicial que abre /social.
@@ -241,6 +243,15 @@ mail:
   default-mailbox-size: 10
   max-message-length: 180
   allow-unknown-targets: false
+
+  # Cantidad de nombres sugeridos cuando se escribe mal un jugador.
+  name-suggestions-limit: 5
+
+  # Cartas enviadas por consola/admin a todos.
+  server-author-name: 'MDVCRAFT'
+  server-mail-expire-days: 30
+  server-mail-ignore-mailbox-limit: true
+  never-expires-text: 'no expira'
 
   mailbox-size-permissions:
     mdvsocial.mailbox.15: 15

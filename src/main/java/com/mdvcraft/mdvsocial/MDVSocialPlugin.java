@@ -116,7 +116,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         long cleanupMinutes = Math.max(5L, getConfig().getLong("mail.cleanup-interval-minutes", 30L));
         Bukkit.getScheduler().runTaskTimer(this, this::cleanupExpiredMail, 20L * 60L, cleanupMinutes * 60L * 20L);
 
-        getLogger().info("MDVSocial 1.2.0 habilitado.");
+        getLogger().info("MDVSocial 1.2.1 habilitado.");
     }
 
     @Override
@@ -317,7 +317,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 
     private boolean handleAdminCommand(CommandSender sender, String[] args) {
         if (args.length == 0) {
-            sender.sendMessage(color("&6MDVSocial &7comandos: reload, open, title"));
+            sender.sendMessage(color("&6MDVSocial &7comandos: reload, open, title, mail"));
             return true;
         }
         if (!sender.hasPermission("mdvsocial.admin")) {
@@ -347,8 +347,12 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             return true;
         }
 
+        if (sub.equals("mail") || sub.equals("correo") || sub.equals("cartas")) {
+            return handleAdminMailCommand(sender, args);
+        }
+
         if (!sub.equals("title")) {
-            sender.sendMessage(color("&cUso: /mdvsocial reload | /mdvsocial open <jugador> <menu> [pagina] | /mdvsocial title ..."));
+            sender.sendMessage(color("&cUso: /mdvsocial reload | /mdvsocial open <jugador> <menu> [pagina] | /mdvsocial title ... | /mdvsocial mail ..."));
             return true;
         }
 
@@ -435,6 +439,62 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 
         sendTitleHelp(sender);
         return true;
+    }
+
+
+    private boolean handleAdminMailCommand(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sendAdminMailHelp(sender);
+            return true;
+        }
+
+        String action = args[1].toLowerCase(Locale.ROOT);
+        if (action.equals("sendall") || action.equals("broadcast")) {
+            if (args.length < 3) {
+                sendAdminMailHelp(sender);
+                return true;
+            }
+            String message = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
+            sendServerMailAll(sender, message, getConfig().getLong("mail.server-mail-expire-days", 30L));
+            return true;
+        }
+
+        if (action.equals("sendall-never") || action.equals("broadcast-never")) {
+            if (args.length < 3) {
+                sendAdminMailHelp(sender);
+                return true;
+            }
+            String message = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
+            sendServerMailAll(sender, message, -1L);
+            return true;
+        }
+
+        if (action.equals("sendall-days") || action.equals("broadcast-days")) {
+            if (args.length < 4) {
+                sendAdminMailHelp(sender);
+                return true;
+            }
+            long days;
+            try {
+                days = Long.parseLong(args[2]);
+            } catch (Exception e) {
+                sender.sendMessage(color("&cLos dias deben ser un numero. Usa -1 para que no expire."));
+                return true;
+            }
+            String message = String.join(" ", Arrays.copyOfRange(args, 3, args.length));
+            sendServerMailAll(sender, message, days);
+            return true;
+        }
+
+        sendAdminMailHelp(sender);
+        return true;
+    }
+
+    private void sendAdminMailHelp(CommandSender sender) {
+        sender.sendMessage(color("&6MDVSocial mail:"));
+        sender.sendMessage(color("&e/mdvsocial mail sendall <mensaje> &7(envia como MDVCRAFT, duracion por config)"));
+        sender.sendMessage(color("&e/mdvsocial mail sendall-days <dias> <mensaje> &7(-1 = no expira)"));
+        sender.sendMessage(color("&e/mdvsocial mail sendall-never <mensaje>"));
     }
 
 
@@ -642,6 +702,7 @@ items:
       - ''
       - '&eClick para comenzar.'
     action: START_MAIL_SEND
+    close-on-click: true
 
   bloquear:
     slot: 15
@@ -654,6 +715,7 @@ items:
       - ''
       - '&eClick para escribir su nombre.'
     action: START_MAIL_BLOCK
+    close-on-click: true
 
   desbloquear:
     slot: 16
@@ -666,6 +728,7 @@ items:
       - ''
       - '&eClick para escribir su nombre.'
     action: START_MAIL_UNBLOCK
+    close-on-click: true
 
   volver:
     slot: 22
@@ -1085,8 +1148,9 @@ items:
             }
             case "bloqueados", "blocked" -> sendBlockedList(player);
             case "cancelar", "cancel" -> {
-                mailSessions.remove(player.getUniqueId());
+                MailComposeSession session = mailSessions.remove(player.getUniqueId());
                 msg(player, "mail-cancelled");
+                returnToMailSessionMenu(player, session);
             }
             default -> {
                 player.sendMessage(color(getPrefix() + "&e/correo &7- abre el menu de correo"));
@@ -1098,14 +1162,22 @@ items:
     }
 
     private void startMailRecipientPrompt(Player player) {
+        startMailRecipientPrompt(player, "correo", 1);
+    }
+
+    private void startMailRecipientPrompt(Player player, String returnMenu, int returnPage) {
         if (!mailEnabled()) { msg(player, "mail-disabled"); return; }
         if (!player.hasPermission("mdvsocial.mail.send")) { msg(player, "no-permission"); return; }
-        mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.RECIPIENT, null));
+        mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.RECIPIENT, null, returnMenu, returnPage));
         msg(player, "mail-recipient-prompt");
     }
 
     private void startMailBlockPrompt(Player player, boolean block) {
-        mailSessions.put(player.getUniqueId(), new MailComposeSession(block ? MailStage.BLOCK : MailStage.UNBLOCK, null));
+        startMailBlockPrompt(player, block, "correo", 1);
+    }
+
+    private void startMailBlockPrompt(Player player, boolean block, String returnMenu, int returnPage) {
+        mailSessions.put(player.getUniqueId(), new MailComposeSession(block ? MailStage.BLOCK : MailStage.UNBLOCK, null, returnMenu, returnPage));
         msg(player, block ? "mail-block-prompt" : "mail-unblock-prompt");
     }
 
@@ -1125,19 +1197,20 @@ items:
         if (text.equalsIgnoreCase("cancelar") || text.equalsIgnoreCase("cancel")) {
             mailSessions.remove(player.getUniqueId());
             msg(player, "mail-cancelled");
+            returnToMailSessionMenu(player, session);
             return;
         }
         if (session.stage == MailStage.RECIPIENT) {
             OfflinePlayer target = findKnownOfflinePlayer(text);
             if (target == null) {
-                msg(player, "mail-player-not-found");
+                sendPlayerNotFound(player, text);
                 return;
             }
             if (target.getUniqueId().equals(player.getUniqueId())) {
                 msg(player, "mail-self");
                 return;
             }
-            mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.MESSAGE, target.getName() == null ? text : target.getName()));
+            mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.MESSAGE, target.getName() == null ? text : target.getName(), session.returnMenu, session.returnPage));
             msg(player, "mail-message-prompt", Map.of("target", target.getName() == null ? text : target.getName(), "max", String.valueOf(getMaxMailLength())));
             return;
         }
@@ -1171,7 +1244,7 @@ items:
     private void sendMailByName(Player sender, String targetName, String message) {
         OfflinePlayer target = findKnownOfflinePlayer(targetName);
         if (target == null) {
-            msg(sender, "mail-player-not-found");
+            sendPlayerNotFound(sender, targetName);
             return;
         }
         sendMail(sender, target, message);
@@ -1201,19 +1274,58 @@ items:
             msg(sender, "mail-full", Map.of("target", target.getName() == null ? "ese jugador" : target.getName(), "limit", String.valueOf(limit)));
             return;
         }
+        long expiresAt = System.currentTimeMillis() + getMailExpireMillis();
+        storeMail(target.getUniqueId(), target.getName() == null ? "jugador" : target.getName(), sender.getUniqueId().toString(), sender.getName(), clean, expiresAt);
+        saveMailData();
+        msg(sender, "mail-sent", Map.of("target", target.getName() == null ? "jugador" : target.getName()));
+    }
+
+    private void sendServerMailAll(CommandSender sender, String message, long expireDays) {
+        if (!mailEnabled()) { msg(sender, "mail-disabled"); return; }
+        String clean = sanitizeMailMessage(message);
+        if (clean.isBlank()) {
+            msg(sender, "mail-empty");
+            return;
+        }
+        int max = getMaxMailLength();
+        if (clean.length() > max) {
+            msg(sender, "mail-too-long", Map.of("max", String.valueOf(max)));
+            return;
+        }
+
+        long expiresAt = expireDays <= 0 ? 0L : System.currentTimeMillis() + (expireDays * 24L * 60L * 60L * 1000L);
+        String author = getConfig().getString("mail.server-author-name", "MDVCRAFT");
+        boolean ignoreLimit = getConfig().getBoolean("mail.server-mail-ignore-mailbox-limit", true);
+        int sent = 0;
+        int skipped = 0;
+        for (OfflinePlayer target : Bukkit.getOfflinePlayers()) {
+            if (target == null || target.getUniqueId() == null || !target.hasPlayedBefore()) continue;
+            if (!ignoreLimit) {
+                int limit = getMailboxLimit(target);
+                int count = getMailIds(target.getUniqueId()).size();
+                if (count >= limit) {
+                    skipped++;
+                    continue;
+                }
+            }
+            storeMail(target.getUniqueId(), target.getName() == null ? "jugador" : target.getName(), "", author, clean, expiresAt);
+            sent++;
+        }
+        saveMailData();
+        msg(sender, "mail-broadcast-sent", Map.of("sent", String.valueOf(sent), "skipped", String.valueOf(skipped)));
+    }
+
+    private void storeMail(UUID targetUuid, String toName, String fromUuid, String fromName, String message, long expiresAt) {
         String id = UUID.randomUUID().toString();
         long now = System.currentTimeMillis();
-        long expiresAt = now + getMailExpireMillis();
-        String base = mailPath(target.getUniqueId(), "letters." + id);
-        mailData.set(base + ".from-uuid", sender.getUniqueId().toString());
-        mailData.set(base + ".from-name", sender.getName());
-        mailData.set(base + ".to-name", target.getName() == null ? target.getName() : target.getName());
-        mailData.set(base + ".message", clean);
+        String base = mailPath(targetUuid, "letters." + id);
+        mailData.set(base + ".from-uuid", fromUuid == null ? "" : fromUuid);
+        mailData.set(base + ".from-name", fromName == null || fromName.isBlank() ? "Desconocido" : fromName);
+        mailData.set(base + ".to-name", toName == null ? "jugador" : toName);
+        mailData.set(base + ".message", message);
         mailData.set(base + ".sent-at", now);
         mailData.set(base + ".expires-at", expiresAt);
         mailData.set(base + ".read", false);
-        saveMailData();
-        msg(sender, "mail-sent", Map.of("target", target.getName() == null ? "jugador" : target.getName()));
     }
 
     private String sanitizeMailMessage(String message) {
@@ -1454,7 +1566,7 @@ items:
 
     private void blockMailByName(Player player, String targetName) {
         OfflinePlayer target = findKnownOfflinePlayer(targetName);
-        if (target == null) { msg(player, "mail-player-not-found"); return; }
+        if (target == null) { sendPlayerNotFound(player, targetName); return; }
         if (target.getUniqueId().equals(player.getUniqueId())) { msg(player, "mail-self-block"); return; }
         addBlockedMail(player.getUniqueId(), target.getUniqueId());
         msg(player, "mail-blocked", Map.of("target", target.getName() == null ? targetName : target.getName()));
@@ -1462,7 +1574,7 @@ items:
 
     private void unblockMailByName(Player player, String targetName) {
         OfflinePlayer target = findKnownOfflinePlayer(targetName);
-        if (target == null) { msg(player, "mail-player-not-found"); return; }
+        if (target == null) { sendPlayerNotFound(player, targetName); return; }
         List<String> list = new ArrayList<>(mailData.getStringList(mailPath(player.getUniqueId(), "blocked")));
         boolean removed = list.remove(target.getUniqueId().toString());
         mailData.set(mailPath(player.getUniqueId(), "blocked"), list);
@@ -1510,6 +1622,7 @@ items:
 
     private String daysLeftText(long expiresAt) {
         long diff = expiresAt - System.currentTimeMillis();
+        if (expiresAt <= 0) return getConfig().getString("mail.never-expires-text", "no expira");
         if (diff <= 0) return "expirada";
         long days = diff / (24L * 60L * 60L * 1000L);
         long hours = (diff / (60L * 60L * 1000L)) % 24L;
@@ -1538,6 +1651,73 @@ items:
         }
         if (line.length() > 0) lines.add(line.toString());
         return lines;
+    }
+
+    private void returnToMailSessionMenu(Player player, MailComposeSession session) {
+        if (session == null) return;
+        String menu = normalize(session.returnMenu);
+        int page = Math.max(1, session.returnPage);
+        if (!menu.isBlank() && customMenus.containsKey(menu)) {
+            Bukkit.getScheduler().runTask(this, () -> openCustomMenu(player, menu, page, "", 1));
+        } else if (customMenus.containsKey("correo")) {
+            Bukkit.getScheduler().runTask(this, () -> openCustomMenu(player, "correo", 1, "menuamigos", 1));
+        }
+    }
+
+    private void sendPlayerNotFound(Player player, String input) {
+        List<String> suggestions = similarPlayerSuggestions(input, getConfig().getInt("mail.name-suggestions-limit", 5));
+        if (suggestions.isEmpty()) {
+            msg(player, "mail-player-not-found");
+        } else {
+            msg(player, "mail-player-not-found-suggestions", Map.of("suggestions", String.join(", ", suggestions)));
+        }
+    }
+
+    private List<String> similarPlayerSuggestions(String input, int limit) {
+        if (input == null || input.isBlank()) return Collections.emptyList();
+        String raw = input.trim();
+        String low = raw.toLowerCase(Locale.ROOT);
+        Map<String, Integer> scores = new HashMap<>();
+        for (OfflinePlayer off : Bukkit.getOfflinePlayers()) {
+            String name = off.getName();
+            if (name == null || name.isBlank()) continue;
+            String n = name.toLowerCase(Locale.ROOT);
+            int score;
+            if (n.equals(low)) score = 0;
+            else if (n.startsWith(low)) score = 1;
+            else if (n.contains(low)) score = 2;
+            else {
+                int dist = levenshtein(low, n);
+                int max = Math.max(2, Math.min(4, Math.max(low.length(), n.length()) / 3));
+                if (dist > max) continue;
+                score = 10 + dist;
+            }
+            scores.put(name, score);
+        }
+        return scores.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue).thenComparing(Map.Entry::getKey))
+                .limit(Math.max(1, limit))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    private int levenshtein(String a, String b) {
+        if (a == null) a = "";
+        if (b == null) b = "";
+        int[] prev = new int[b.length() + 1];
+        int[] curr = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) prev[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            curr[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                curr[j] = Math.min(Math.min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            int[] tmp = prev;
+            prev = curr;
+            curr = tmp;
+        }
+        return prev[b.length()];
     }
 
     private void sendTitleHelp(CommandSender sender) {
@@ -1836,6 +2016,11 @@ items:
         Bukkit.getScheduler().runTask(this, task);
     }
 
+    private boolean shouldCloseOnClick(PersistentDataContainer pdc) {
+        String value = pdc.get(keyCloseOnClick, PersistentDataType.STRING);
+        return value == null || !value.equalsIgnoreCase("false");
+    }
+
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -1869,9 +2054,18 @@ items:
             }
             case "COMMAND_PLAYER" -> runPlayerCommandsFromPdc(player, pdc);
             case "OPEN_MAILBOX" -> openMailbox(player, 0);
-            case "START_MAIL_SEND" -> startMailRecipientPrompt(player);
-            case "START_MAIL_BLOCK" -> startMailBlockPrompt(player, true);
-            case "START_MAIL_UNBLOCK" -> startMailBlockPrompt(player, false);
+            case "START_MAIL_SEND" -> {
+                if (shouldCloseOnClick(pdc)) player.closeInventory();
+                startMailRecipientPrompt(player, holder.menuId.isBlank() ? "correo" : holder.menuId, holder.page);
+            }
+            case "START_MAIL_BLOCK" -> {
+                if (shouldCloseOnClick(pdc)) player.closeInventory();
+                startMailBlockPrompt(player, true, holder.menuId.isBlank() ? "correo" : holder.menuId, holder.page);
+            }
+            case "START_MAIL_UNBLOCK" -> {
+                if (shouldCloseOnClick(pdc)) player.closeInventory();
+                startMailBlockPrompt(player, false, holder.menuId.isBlank() ? "correo" : holder.menuId, holder.page);
+            }
             case "CLEAR_TITLE" -> {
                 clearActiveTitle(player);
                 openTitlesHome(player);
@@ -2198,11 +2392,14 @@ items:
         }
 
         if (!commandName.equals("mdvsocial")) return Collections.emptyList();
-        if (args.length == 1) return partial(args[0], Arrays.asList("reload", "open", "title"));
+        if (args.length == 1) return partial(args[0], Arrays.asList("reload", "open", "title", "mail"));
         if (args.length == 3 && args[0].equalsIgnoreCase("open")) {
             List<String> menus = new ArrayList<>(customMenus.keySet());
             menus.addAll(Arrays.asList("main", "titulos", "mis_titulos", "tienda", "rangos"));
             return partial(args[2], menus);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("mail")) {
+            return partial(args[1], Arrays.asList("sendall", "sendall-days", "sendall-never"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("title")) {
             return partial(args[1], Arrays.asList("give", "remove", "set", "clear", "give-radius", "give-near"));
@@ -2331,9 +2528,16 @@ items:
     static final class MailComposeSession {
         final MailStage stage;
         final String targetName;
+        final String returnMenu;
+        final int returnPage;
         MailComposeSession(MailStage stage, String targetName) {
+            this(stage, targetName, "correo", 1);
+        }
+        MailComposeSession(MailStage stage, String targetName, String returnMenu, int returnPage) {
             this.stage = stage;
             this.targetName = targetName;
+            this.returnMenu = returnMenu == null ? "correo" : returnMenu;
+            this.returnPage = returnPage <= 0 ? 1 : returnPage;
         }
     }
 
