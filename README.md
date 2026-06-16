@@ -1,4 +1,4 @@
-# MDVSocial 1.1.4
+# MDVSocial 1.1.6
 
 Plugin social inicial para MDVCRAFT.
 
@@ -191,7 +191,7 @@ El proyecto trae `.github/workflows/maven.yml`.
 
 Sube el proyecto a GitHub y compila desde Actions.
 
-## 1.1.4 - Cabezas custom en menus
+## 1.1.6 - Cabezas custom en menus
 
 Esta version agrega texturas base64 para cualquier item de menu que use `material: PLAYER_HEAD`.
 
@@ -228,7 +228,7 @@ texture-base64: 'BASE64'
 
 Si una cabeza tiene textura, se usa la textura. Si no tiene textura pero tiene `head-owner`, se usa la cabeza del jugador indicado.
 
-## 1.1.4 - PlaceholderAPI en menus
+## 1.1.6 - PlaceholderAPI en menus
 
 Los menus modulares parsean PlaceholderAPI en `name`, `lore` y comandos `COMMAND_PLAYER`.
 
@@ -246,7 +246,7 @@ Atajos disponibles:
 
 Tambien puedes usar placeholders PAPI directamente, por ejemplo `%mmocore_level%`.
 
-## 1.1.4 - Titulo obligatorio / Forastero visible
+## 1.1.6 - Titulo obligatorio / Forastero visible
 
 Configuracion recomendada:
 

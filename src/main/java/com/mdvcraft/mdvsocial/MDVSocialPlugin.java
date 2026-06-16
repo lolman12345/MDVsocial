@@ -30,6 +30,8 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.profile.PlayerProfile;
+import org.bukkit.profile.PlayerTextures;
 
 import java.io.File;
 import java.io.IOException;
@@ -718,47 +720,13 @@ items:
         }
     }
 
-    private Object createModernProfile() throws Exception {
-        for (Method m : Bukkit.class.getMethods()) {
-            String name = m.getName();
-            if (!name.equals("createPlayerProfile") && !name.equals("createProfile")) continue;
-            Class<?>[] params = m.getParameterTypes();
-            if (params.length == 2 && params[0] == UUID.class && params[1] == String.class) {
-                return m.invoke(null, UUID.randomUUID(), "MDVSocial");
-            }
-            if (params.length == 1 && params[0] == UUID.class) {
-                return m.invoke(null, UUID.randomUUID());
-            }
-            if (params.length == 1 && params[0] == String.class) {
-                return m.invoke(null, "MDVSocial");
-            }
-        }
-        return null;
-    }
-
-    private Method findOneArgMethod(Object target, String... names) {
-        if (target == null) return null;
-        Set<String> wanted = new HashSet<>(Arrays.asList(names));
-        for (Method m : target.getClass().getMethods()) {
-            if (wanted.contains(m.getName()) && m.getParameterCount() == 1) return m;
-        }
-        return null;
-    }
-
-    private Method findCompatibleOneArgMethod(Object target, Object argument, String... names) {
-        if (target == null || argument == null) return null;
-        Set<String> wanted = new HashSet<>(Arrays.asList(names));
-        for (Method m : target.getClass().getMethods()) {
-            if (!wanted.contains(m.getName()) || m.getParameterCount() != 1) continue;
-            if (m.getParameterTypes()[0].isAssignableFrom(argument.getClass())) return m;
-        }
-        return null;
-    }
-
     /**
-     * Aplica texturas custom a cabezas usando la API moderna de Bukkit/Paper por reflexion.
-     * En 1.21+ NO toca el campo interno profile con GameProfile, porque ahora puede ser
-     * ResolvableProfile y eso provoca IllegalArgumentException.
+     * Aplica texturas custom a cabezas usando la API publica de Bukkit/Paper.
+     *
+     * Version 1.1.6:
+     * - Sin reflexion.
+     * - Sin tocar campos internos del SkullMeta.
+     * - Evita IllegalAccessException/IllegalArgumentException en Paper/Purpur 1.21+.
      */
     private void applySkullTexture(SkullMeta skull, String textureValue) {
         if (skull == null || textureValue == null || textureValue.isBlank()) return;
@@ -770,24 +738,13 @@ items:
         }
 
         try {
-            Object profile = createModernProfile();
-            if (profile == null) throw new IllegalStateException("No profile factory available");
-
-            Method getTextures = profile.getClass().getMethod("getTextures");
-            Object textures = getTextures.invoke(profile);
-
-            Method setSkin = findOneArgMethod(textures, "setSkin");
-            if (setSkin == null) throw new IllegalStateException("No setSkin method available");
-            setSkin.invoke(textures, new URL(textureUrl));
-
-            Method setTextures = findCompatibleOneArgMethod(profile, textures, "setTextures");
-            if (setTextures != null) setTextures.invoke(profile, textures);
-
-            Method setProfile = findCompatibleOneArgMethod(skull, profile, "setOwnerProfile", "setPlayerProfile");
-            if (setProfile == null) throw new IllegalStateException("No skull profile setter available");
-            setProfile.invoke(skull, profile);
+            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID(), "MDVSocial");
+            PlayerTextures textures = profile.getTextures();
+            textures.setSkin(new URL(textureUrl));
+            profile.setTextures(textures);
+            skull.setOwnerProfile(profile);
         } catch (Throwable ex) {
-            getLogger().warning("No se pudo aplicar textura custom de cabeza con PlayerProfile: " + ex.getClass().getSimpleName());
+            getLogger().warning("No se pudo aplicar textura custom de cabeza con API publica: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
         }
     }
 
