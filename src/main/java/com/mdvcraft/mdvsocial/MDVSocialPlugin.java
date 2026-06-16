@@ -58,6 +58,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private final Map<String, TitleDef> titles = new HashMap<>();
     private final Map<String, RankDef> ranks = new HashMap<>();
     private final Map<String, CustomMenuDef> customMenus = new HashMap<>();
+    private final List<ExternalGuiAction> externalGuiActions = new ArrayList<>();
     private final List<Integer> listSlots = new ArrayList<>();
 
     private File dataFile;
@@ -86,6 +87,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 
         Bukkit.getPluginManager().registerEvents(this, this);
         getCommand("social").setExecutor(this);
+        getCommand("social").setTabCompleter(this);
         getCommand("titulos").setExecutor(this);
         getCommand("mdvsocial").setExecutor(this);
         getCommand("mdvsocial").setTabCompleter(this);
@@ -95,7 +97,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             getLogger().info("PlaceholderAPI detectado. Placeholders registrados.");
         }
 
-        getLogger().info("MDVSocial 1.1.4 habilitado.");
+        getLogger().info("MDVSocial 1.1.7 habilitado.");
     }
 
     @Override
@@ -111,6 +113,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         loadListSlots();
         ensureDefaultMenus();
         loadCustomMenus();
+        loadExternalGuiActions();
     }
 
     private void loadData() {
@@ -213,7 +216,11 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                 msg(player, "no-permission");
                 return true;
             }
-            openSocialStart(player);
+            if (args.length >= 1) {
+                openRequestedSocialMenu(player, args[0], args.length >= 2 ? parsePage(args[1]) : 1);
+            } else {
+                openSocialStart(player);
+            }
             return true;
         }
 
@@ -255,7 +262,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 
     private boolean handleAdminCommand(CommandSender sender, String[] args) {
         if (args.length == 0) {
-            sender.sendMessage(color("&6MDVSocial &7comandos: reload, title"));
+            sender.sendMessage(color("&6MDVSocial &7comandos: reload, open, title"));
             return true;
         }
         if (!sender.hasPermission("mdvsocial.admin")) {
@@ -271,8 +278,22 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             return true;
         }
 
+        if (sub.equals("open")) {
+            if (args.length < 3) {
+                sender.sendMessage(color("&cUso: /mdvsocial open <jugador> <menu> [pagina]"));
+                return true;
+            }
+            Player target = Bukkit.getPlayerExact(args[1]);
+            if (target == null) {
+                msg(sender, "player-not-found");
+                return true;
+            }
+            openRequestedSocialMenu(target, args[2], args.length >= 4 ? parsePage(args[3]) : 1);
+            return true;
+        }
+
         if (!sub.equals("title")) {
-            sender.sendMessage(color("&cUso: /mdvsocial reload | /mdvsocial title ..."));
+            sender.sendMessage(color("&cUso: /mdvsocial reload | /mdvsocial open <jugador> <menu> [pagina] | /mdvsocial title ..."));
             return true;
         }
 
@@ -549,6 +570,43 @@ items:
         getLogger().info("Menus modulares cargados: " + customMenus.size());
     }
 
+    private void loadExternalGuiActions() {
+        externalGuiActions.clear();
+        ConfigurationSection sec = getConfig().getConfigurationSection("external-gui-actions");
+        if (sec == null) return;
+        for (String id : sec.getKeys(false)) {
+            ConfigurationSection actionSec = sec.getConfigurationSection(id);
+            if (actionSec == null || !actionSec.getBoolean("enabled", true)) continue;
+
+            List<Integer> slots = new ArrayList<>(actionSec.getIntegerList("slots"));
+            int singleSlot = actionSec.getInt("slot", Integer.MIN_VALUE);
+            if (singleSlot != Integer.MIN_VALUE) slots.add(singleSlot);
+            slots = slots.stream().filter(i -> i >= 0 && i < 54).distinct().collect(Collectors.toList());
+            if (slots.isEmpty()) {
+                getLogger().warning("external-gui-actions." + id + " no tiene slot/slots validos.");
+                continue;
+            }
+
+            List<String> commands = new ArrayList<>(actionSec.getStringList("commands"));
+            String singleCommand = actionSec.getString("command", "");
+            if (commands.isEmpty() && singleCommand != null && !singleCommand.isBlank()) commands.add(singleCommand);
+            List<String> consoleCommands = new ArrayList<>(actionSec.getStringList("console-commands"));
+
+            ExternalGuiAction def = new ExternalGuiAction(
+                    id,
+                    actionSec.getString("title", actionSec.getString("title-equals", "")),
+                    actionSec.getString("title-contains", ""),
+                    slots,
+                    commands,
+                    consoleCommands,
+                    actionSec.getBoolean("close-on-click", true),
+                    actionSec.getBoolean("cancel-event", true)
+            );
+            externalGuiActions.add(def);
+        }
+        if (!externalGuiActions.isEmpty()) getLogger().info("Puentes de GUIs externas cargados: " + externalGuiActions.size());
+    }
+
     private CustomMenuDef parseCustomMenu(String id, YamlConfiguration yaml) {
         String title = yaml.getString("title", "&8" + id);
         int size = normalizeMenuSize(yaml.getInt("size", 27));
@@ -571,6 +629,36 @@ items:
 
     private int parsePage(String key) {
         try { return Math.max(1, Integer.parseInt(key)); } catch (Exception e) { return 1; }
+    }
+
+    private void openRequestedSocialMenu(Player player, String rawMenu, int page) {
+        String menu = normalize(rawMenu);
+        if (menu.isBlank() || menu.equals("main") || menu.equals("inicio")) {
+            if (customMenus.containsKey("main")) openCustomMenu(player, "main", Math.max(1, page), "", 1);
+            else openMain(player);
+            return;
+        }
+        if (menu.equals("titulos") || menu.equals("titles") || menu.equals("titulo")) {
+            openTitlesHome(player);
+            return;
+        }
+        if (menu.equals("mis_titulos") || menu.equals("my_titles") || menu.equals("my-titles")) {
+            openTitleList(player, "MY_TITLES", Math.max(0, page - 1));
+            return;
+        }
+        if (menu.equals("tienda") || menu.equals("shop") || menu.equals("title_shop") || menu.equals("title-shop")) {
+            openTitleList(player, "SHOP", Math.max(0, page - 1));
+            return;
+        }
+        if (menu.equals("rangos") || menu.equals("ranks")) {
+            openRanks(player, Math.max(0, page - 1));
+            return;
+        }
+        if (customMenus.containsKey(menu)) {
+            openCustomMenu(player, menu, Math.max(1, page), "", 1);
+            return;
+        }
+        player.sendMessage(color(getPrefix() + "&cEse menu no existe: &e" + rawMenu));
     }
 
     private int normalizeMenuSize(int size) {
@@ -1072,10 +1160,51 @@ items:
         return out;
     }
 
+    private boolean handleExternalGuiClick(InventoryClickEvent event, Player player) {
+        if (externalGuiActions.isEmpty()) return false;
+        if (event.getClickedInventory() == null) return false;
+        if (!event.getClickedInventory().equals(event.getView().getTopInventory())) return false;
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) return false;
+
+        String title = ChatColor.stripColor(event.getView().getTitle());
+        if (title == null) title = event.getView().getTitle();
+
+        for (ExternalGuiAction def : externalGuiActions) {
+            if (!def.matches(title, slot)) continue;
+            if (def.cancelEvent) event.setCancelled(true);
+            runExternalGuiCommands(player, def);
+            return true;
+        }
+        return false;
+    }
+
+    private void runExternalGuiCommands(Player player, ExternalGuiAction def) {
+        Runnable task = () -> {
+            if (def.closeOnClick) player.closeInventory();
+            for (String raw : def.playerCommands) {
+                String cmd = applyPlayerPlaceholders(raw, player).trim();
+                if (cmd.isBlank()) continue;
+                if (cmd.startsWith("/")) cmd = cmd.substring(1);
+                Bukkit.dispatchCommand(player, cmd);
+            }
+            for (String raw : def.consoleCommands) {
+                String cmd = applyPlayerPlaceholders(raw, player).trim();
+                if (cmd.isBlank()) continue;
+                if (cmd.startsWith("/")) cmd = cmd.substring(1);
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
+            }
+        };
+        Bukkit.getScheduler().runTask(this, task);
+    }
+
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
-        if (!(event.getInventory().getHolder() instanceof MenuHolder holder)) return;
+        if (!(event.getInventory().getHolder() instanceof MenuHolder holder)) {
+            handleExternalGuiClick(event, player);
+            return;
+        }
         event.setCancelled(true);
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || clicked.getType().isAir() || !clicked.hasItemMeta()) return;
@@ -1392,8 +1521,23 @@ items:
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!command.getName().equalsIgnoreCase("mdvsocial")) return Collections.emptyList();
-        if (args.length == 1) return partial(args[0], Arrays.asList("reload", "title"));
+        String commandName = command.getName().toLowerCase(Locale.ROOT);
+        if (commandName.equals("social")) {
+            if (args.length == 1) {
+                List<String> menus = new ArrayList<>(customMenus.keySet());
+                menus.addAll(Arrays.asList("main", "titulos", "mis_titulos", "tienda", "rangos"));
+                return partial(args[0], menus);
+            }
+            return Collections.emptyList();
+        }
+
+        if (!commandName.equals("mdvsocial")) return Collections.emptyList();
+        if (args.length == 1) return partial(args[0], Arrays.asList("reload", "open", "title"));
+        if (args.length == 3 && args[0].equalsIgnoreCase("open")) {
+            List<String> menus = new ArrayList<>(customMenus.keySet());
+            menus.addAll(Arrays.asList("main", "titulos", "mis_titulos", "tienda", "rangos"));
+            return partial(args[2], menus);
+        }
         if (args.length == 2 && args[0].equalsIgnoreCase("title")) {
             return partial(args[1], Arrays.asList("give", "remove", "set", "clear", "give-radius", "give-near"));
         }
@@ -1436,6 +1580,36 @@ items:
         @Override
         public Inventory getInventory() {
             return inventory;
+        }
+    }
+
+    static final class ExternalGuiAction {
+        final String id;
+        final String titleEquals;
+        final String titleContains;
+        final List<Integer> slots;
+        final List<String> playerCommands;
+        final List<String> consoleCommands;
+        final boolean closeOnClick;
+        final boolean cancelEvent;
+
+        ExternalGuiAction(String id, String titleEquals, String titleContains, List<Integer> slots, List<String> playerCommands, List<String> consoleCommands, boolean closeOnClick, boolean cancelEvent) {
+            this.id = id == null ? "" : id;
+            this.titleEquals = titleEquals == null ? "" : ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', titleEquals)).trim().toLowerCase(Locale.ROOT);
+            this.titleContains = titleContains == null ? "" : ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', titleContains)).trim().toLowerCase(Locale.ROOT);
+            this.slots = slots == null ? Collections.emptyList() : slots;
+            this.playerCommands = playerCommands == null ? Collections.emptyList() : playerCommands;
+            this.consoleCommands = consoleCommands == null ? Collections.emptyList() : consoleCommands;
+            this.closeOnClick = closeOnClick;
+            this.cancelEvent = cancelEvent;
+        }
+
+        boolean matches(String rawTitle, int slot) {
+            if (!slots.contains(slot)) return false;
+            String title = rawTitle == null ? "" : rawTitle.trim().toLowerCase(Locale.ROOT);
+            if (!titleEquals.isBlank() && title.equals(titleEquals)) return true;
+            if (!titleContains.isBlank() && title.contains(titleContains)) return true;
+            return titleEquals.isBlank() && titleContains.isBlank();
         }
     }
 

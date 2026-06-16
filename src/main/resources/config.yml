@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.1.6
+# MDVSocial 1.1.7
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -207,6 +207,37 @@ list-slots:
   - 41
   - 42
   - 43
+
+
+# ==========================================================
+# Puentes para GUIs externas
+# Permite que MDVSocial detecte clicks en GUIs de otros plugins
+# y ejecute comandos como /social main o /social perfil.
+#
+# title: nombre exacto del inventario, sin colores.
+# title-contains: alternativa si quieres detectar por texto parcial.
+# slot/slots: casilla del boton dentro del inventario superior.
+# commands: se ejecutan como jugador.
+# console-commands: se ejecutan desde consola.
+# ==========================================================
+external-gui-actions:
+  mmocore-friends-main:
+    enabled: false
+    title: 'Friends'
+    slot: 45
+    close-on-click: true
+    cancel-event: true
+    commands:
+      - 'social main'
+
+  mmocore-profile-perfil:
+    enabled: false
+    title-contains: 'Profile'
+    slot: 49
+    close-on-click: true
+    cancel-event: true
+    commands:
+      - 'social perfil'
 
 # ==========================================================
 # Titulos
