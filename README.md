@@ -1,4 +1,4 @@
-# MDVSocial 1.2.1
+# MDVSocial 1.2.2
 
 Plugin social modular para MDVCRAFT.
 
@@ -9,6 +9,8 @@ Plugin social modular para MDVCRAFT.
 - Placeholders de titulo para PlaceholderAPI.
 - Puentes para GUIs externas.
 - Sistema base de cartas/correo interno.
+- Responder cartas directamente desde la lectura.
+- Las cartas oficiales de MDVCRAFT no pueden bloquearse.
 
 ## Sistema de cartas
 
@@ -28,6 +30,7 @@ Acciones para menus modulares:
 - `START_MAIL_SEND`
 - `START_MAIL_BLOCK`
 - `START_MAIL_UNBLOCK`
+- `REPLY_MAIL`
 
 Datos:
 

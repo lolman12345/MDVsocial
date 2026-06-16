@@ -116,7 +116,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         long cleanupMinutes = Math.max(5L, getConfig().getLong("mail.cleanup-interval-minutes", 30L));
         Bukkit.getScheduler().runTaskTimer(this, this::cleanupExpiredMail, 20L * 60L, cleanupMinutes * 60L * 20L);
 
-        getLogger().info("MDVSocial 1.2.1 habilitado.");
+        getLogger().info("MDVSocial 1.2.2 habilitado.");
     }
 
     @Override
@@ -1181,6 +1181,32 @@ items:
         msg(player, block ? "mail-block-prompt" : "mail-unblock-prompt");
     }
 
+    private void startMailReplyFromMail(Player player, String mailId, int returnPage) {
+        if (!mailEnabled()) { msg(player, "mail-disabled"); return; }
+        if (!player.hasPermission("mdvsocial.mail.send")) { msg(player, "no-permission"); return; }
+        if (mailId == null || mailId.isBlank() || !mailData.contains(mailPath(player.getUniqueId(), "letters." + mailId))) {
+            msg(player, "mail-not-found");
+            return;
+        }
+        String base = mailPath(player.getUniqueId(), "letters." + mailId);
+        String fromUuidText = mailData.getString(base + ".from-uuid", "");
+        String fromName = mailData.getString(base + ".from-name", getConfig().getString("mail.server-author-name", "MDVCRAFT"));
+        if (fromUuidText == null || fromUuidText.isBlank()) {
+            msg(player, "mail-cannot-reply-server");
+            return;
+        }
+        try {
+            UUID targetUuid = UUID.fromString(fromUuidText);
+            OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
+            String targetName = target.getName() == null || target.getName().isBlank() ? fromName : target.getName();
+            player.closeInventory();
+            mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.MESSAGE, targetName, targetUuid, "MAILBOX", Math.max(0, returnPage)));
+            msg(player, "mail-reply-prompt", Map.of("target", targetName, "max", String.valueOf(getMaxMailLength())));
+        } catch (Exception ignored) {
+            msg(player, "mail-cannot-reply-server");
+        }
+    }
+
     @EventHandler
     public void onMailChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
@@ -1216,8 +1242,10 @@ items:
         }
         if (session.stage == MailStage.MESSAGE) {
             String targetName = session.targetName;
+            UUID targetUuid = session.targetUuid;
             mailSessions.remove(player.getUniqueId());
-            sendMailByName(player, targetName, text);
+            if (targetUuid != null) sendMailByUuid(player, targetUuid, targetName, text);
+            else sendMailByName(player, targetName, text);
             return;
         }
         if (session.stage == MailStage.BLOCK) {
@@ -1245,6 +1273,19 @@ items:
         OfflinePlayer target = findKnownOfflinePlayer(targetName);
         if (target == null) {
             sendPlayerNotFound(sender, targetName);
+            return;
+        }
+        sendMail(sender, target, message);
+    }
+
+    private void sendMailByUuid(Player sender, UUID targetUuid, String fallbackName, String message) {
+        if (targetUuid == null) {
+            sendMailByName(sender, fallbackName, message);
+            return;
+        }
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
+        if (target == null || (!target.hasPlayedBefore() && !target.isOnline() && !getConfig().getBoolean("mail.allow-unknown-targets", false))) {
+            msg(sender, "mail-player-not-found");
             return;
         }
         sendMail(sender, target, message);
@@ -1519,6 +1560,7 @@ items:
         inv.setItem(getConfig().getInt("mail.menus.read.letter-slot", 13), letter);
 
         inv.setItem(getConfig().getInt("mail.menus.read.back-slot", 11), mailActionItem("items.back", "MAIL_BACK", id, fromUuid));
+        inv.setItem(getConfig().getInt("mail.menus.read.reply-slot", 14), mailActionItem("mail.items.reply", "REPLY_MAIL", id, fromUuid));
         inv.setItem(getConfig().getInt("mail.menus.read.delete-slot", 15), mailActionItem("mail.items.delete", "DELETE_MAIL", id, fromUuid));
         inv.setItem(getConfig().getInt("mail.menus.read.block-slot", 16), mailActionItem("mail.items.block-sender", "BLOCK_MAIL_SENDER", id, fromUuid));
         player.openInventory(inv);
@@ -1554,14 +1596,21 @@ items:
         msg(player, "mail-deleted");
     }
 
-    private void blockMailSender(Player player, String senderUuidText) {
-        if (senderUuidText == null || senderUuidText.isBlank()) return;
+    private boolean blockMailSender(Player player, String senderUuidText) {
+        if (senderUuidText == null || senderUuidText.isBlank()) {
+            msg(player, "mail-cannot-block-server");
+            return false;
+        }
         try {
             UUID uuid = UUID.fromString(senderUuidText);
             addBlockedMail(player.getUniqueId(), uuid);
             OfflinePlayer off = Bukkit.getOfflinePlayer(uuid);
             msg(player, "mail-blocked", Map.of("target", off.getName() == null ? "jugador" : off.getName()));
-        } catch (Exception ignored) { }
+            return true;
+        } catch (Exception ignored) {
+            msg(player, "mail-cannot-block-server");
+            return false;
+        }
     }
 
     private void blockMailByName(Player player, String targetName) {
@@ -1656,6 +1705,11 @@ items:
     private void returnToMailSessionMenu(Player player, MailComposeSession session) {
         if (session == null) return;
         String menu = normalize(session.returnMenu);
+        if (menu.equals("mailbox") || menu.equals("buzon")) {
+            int mailboxPage = Math.max(0, session.returnPage);
+            Bukkit.getScheduler().runTask(this, () -> openMailbox(player, mailboxPage));
+            return;
+        }
         int page = Math.max(1, session.returnPage);
         if (!menu.isBlank() && customMenus.containsKey(menu)) {
             Bukkit.getScheduler().runTask(this, () -> openCustomMenu(player, menu, page, "", 1));
@@ -2099,10 +2153,13 @@ items:
                 openMailbox(player, holder.page);
             }
             case "MAIL_BACK" -> openMailbox(player, holder.page);
+            case "REPLY_MAIL" -> {
+                String mailId = pdc.get(keyMailId, PersistentDataType.STRING);
+                startMailReplyFromMail(player, mailId, holder.page);
+            }
             case "BLOCK_MAIL_SENDER" -> {
                 String senderUuid = pdc.get(keyMailSender, PersistentDataType.STRING);
-                blockMailSender(player, senderUuid);
-                player.closeInventory();
+                if (blockMailSender(player, senderUuid)) player.closeInventory();
             }
             case "COMMANDS" -> runConfiguredCommands(player, pdc.get(keyMenu, PersistentDataType.STRING));
             default -> { }
@@ -2528,16 +2585,24 @@ items:
     static final class MailComposeSession {
         final MailStage stage;
         final String targetName;
+        final UUID targetUuid;
         final String returnMenu;
         final int returnPage;
         MailComposeSession(MailStage stage, String targetName) {
-            this(stage, targetName, "correo", 1);
+            this(stage, targetName, null, "correo", 1);
         }
         MailComposeSession(MailStage stage, String targetName, String returnMenu, int returnPage) {
+            this(stage, targetName, null, returnMenu, returnPage);
+        }
+        MailComposeSession(MailStage stage, String targetName, UUID targetUuid, String returnMenu, int returnPage) {
             this.stage = stage;
             this.targetName = targetName;
-            this.returnMenu = returnMenu == null ? "correo" : returnMenu;
-            this.returnPage = returnPage <= 0 ? 1 : returnPage;
+            this.targetUuid = targetUuid;
+            String normalizedReturnMenu = returnMenu == null ? "correo" : returnMenu;
+            this.returnMenu = normalizedReturnMenu;
+            this.returnPage = normalizedReturnMenu.equalsIgnoreCase("MAILBOX") || normalizedReturnMenu.equalsIgnoreCase("buzon")
+                    ? Math.max(0, returnPage)
+                    : (returnPage <= 0 ? 1 : returnPage);
         }
     }
 

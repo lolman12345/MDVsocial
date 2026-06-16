@@ -26,6 +26,7 @@ messages:
   mail-disabled: '&cEl sistema de cartas esta desactivado.'
   mail-recipient-prompt: '&eEscribe el nombre del destinatario en el chat. Escribe &ccancelar &epara salir.'
   mail-message-prompt: '&eAhora escribe el mensaje para &a{target}&e. Maximo &a{max} &ecaracteres. Escribe &ccancelar &epara salir.'
+  mail-reply-prompt: '&eEscribe la carta que le enviaras a &a{target}&e. Maximo &a{max} &ecaracteres. Escribe &ccancelar &epara salir.'
   mail-block-prompt: '&eEscribe el nombre del jugador que quieres bloquear para cartas. Escribe &ccancelar &epara salir.'
   mail-unblock-prompt: '&eEscribe el nombre del jugador que quieres desbloquear. Escribe &ccancelar &epara salir.'
   mail-cancelled: '&7Accion de carta cancelada.'
@@ -45,6 +46,8 @@ messages:
   mail-unblocked: '&aDesbloqueaste las cartas de &e{target}&a.'
   mail-not-blocked: '&e{target} &7no estaba bloqueado.'
   mail-broadcast-sent: '&aCarta del servidor enviada a &e{sent} &ajugadores. &7Omitidos: &e{skipped}&7.'
+  mail-cannot-block-server: '&cNo puedes bloquear cartas oficiales de MDVCRAFT.'
+  mail-cannot-reply-server: '&cNo puedes responder cartas oficiales de MDVCRAFT.'
 
 settings:
   # Menu inicial que abre /social.
@@ -298,6 +301,7 @@ mail:
       size: 27
       back-slot: 11
       letter-slot: 13
+      reply-slot: 14
       delete-slot: 15
       block-slot: 16
 
@@ -306,6 +310,13 @@ mail:
       name: '&7Buzon vacio'
       lore:
         - '&8No tienes cartas guardadas.'
+    reply:
+      material: WRITABLE_BOOK
+      name: '&e&lResponder carta'
+      lore:
+        - '&7Responde directamente al jugador'
+        - '&7que te envio esta carta.'
+        - '&8Se cerrara el menu y escribiras en chat.'
     delete:
       material: RED_DYE
       name: '&c&lEliminar carta'
