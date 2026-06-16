@@ -1,4 +1,4 @@
-# MDVSocial 1.1.6
+# MDVSocial 1.1.7
 
 Plugin social inicial para MDVCRAFT.
 
@@ -191,7 +191,7 @@ El proyecto trae `.github/workflows/maven.yml`.
 
 Sube el proyecto a GitHub y compila desde Actions.
 
-## 1.1.6 - Cabezas custom en menus
+## 1.1.7 - Cabezas custom en menus
 
 Esta version agrega texturas base64 para cualquier item de menu que use `material: PLAYER_HEAD`.
 
@@ -228,7 +228,7 @@ texture-base64: 'BASE64'
 
 Si una cabeza tiene textura, se usa la textura. Si no tiene textura pero tiene `head-owner`, se usa la cabeza del jugador indicado.
 
-## 1.1.6 - PlaceholderAPI en menus
+## 1.1.7 - PlaceholderAPI en menus
 
 Los menus modulares parsean PlaceholderAPI en `name`, `lore` y comandos `COMMAND_PLAYER`.
 
@@ -246,7 +246,7 @@ Atajos disponibles:
 
 Tambien puedes usar placeholders PAPI directamente, por ejemplo `%mmocore_level%`.
 
-## 1.1.6 - Titulo obligatorio / Forastero visible
+## 1.1.7 - Titulo obligatorio / Forastero visible
 
 Configuracion recomendada:
 
@@ -274,4 +274,29 @@ Para equipar Aventurero al elegir raza desde MMOCore:
 triggers:
   class-chosen:
   - 'command{format="mdvsocial title set %player_name% aventurero"}'
+```
+
+
+## MDVSocial 1.1.7
+
+Novedades:
+
+- `/social <menu>` abre cualquier menu modular de `plugins/MDVSocial/Menus/`.
+  - Ejemplos: `/social main`, `/social perfil`, `/social clan`, `/social titulos`.
+- `/mdvsocial open <jugador> <menu> [pagina]` abre un menu especifico a otro jugador.
+- `external-gui-actions` permite detectar clicks dentro de GUIs de otros plugins por titulo y slot.
+  Esto sirve para que una GUI de MMOCore, Friends u otro plugin tenga un boton que vuelva a MDVSocial.
+
+Ejemplo:
+
+```yaml
+external-gui-actions:
+  mmocore-friends-main:
+    enabled: true
+    title: 'Friends'
+    slot: 45
+    close-on-click: true
+    cancel-event: true
+    commands:
+      - 'social main'
 ```
