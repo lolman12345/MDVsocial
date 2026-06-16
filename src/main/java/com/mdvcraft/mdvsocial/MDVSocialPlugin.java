@@ -33,10 +33,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.net.URL;
+import java.util.Base64;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -692,9 +692,36 @@ items:
         return texture == null ? "" : texture.trim();
     }
 
-    private Object createPaperProfile() throws Exception {
+    /**
+     * Extrae la URL real desde una textura Base64 de Minecraft Heads.
+     * Tambien acepta una URL directa http/https por comodidad.
+     */
+    private String extractTextureUrl(String textureValue) {
+        if (textureValue == null) return "";
+        String value = textureValue.trim();
+        if (value.isBlank()) return "";
+        if (value.startsWith("http://") || value.startsWith("https://")) return value;
+
+        try {
+            String decoded = new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8);
+            int urlKey = decoded.indexOf("\"url\"");
+            if (urlKey < 0) return "";
+            int colon = decoded.indexOf(':', urlKey);
+            if (colon < 0) return "";
+            int firstQuote = decoded.indexOf('\"', colon);
+            if (firstQuote < 0) return "";
+            int secondQuote = decoded.indexOf('\"', firstQuote + 1);
+            if (secondQuote < 0) return "";
+            return decoded.substring(firstQuote + 1, secondQuote).replace("\\/", "/");
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private Object createModernProfile() throws Exception {
         for (Method m : Bukkit.class.getMethods()) {
-            if (!m.getName().equals("createProfile")) continue;
+            String name = m.getName();
+            if (!name.equals("createPlayerProfile") && !name.equals("createProfile")) continue;
             Class<?>[] params = m.getParameterTypes();
             if (params.length == 2 && params[0] == UUID.class && params[1] == String.class) {
                 return m.invoke(null, UUID.randomUUID(), "MDVSocial");
@@ -709,69 +736,58 @@ items:
         return null;
     }
 
+    private Method findOneArgMethod(Object target, String... names) {
+        if (target == null) return null;
+        Set<String> wanted = new HashSet<>(Arrays.asList(names));
+        for (Method m : target.getClass().getMethods()) {
+            if (wanted.contains(m.getName()) && m.getParameterCount() == 1) return m;
+        }
+        return null;
+    }
+
+    private Method findCompatibleOneArgMethod(Object target, Object argument, String... names) {
+        if (target == null || argument == null) return null;
+        Set<String> wanted = new HashSet<>(Arrays.asList(names));
+        for (Method m : target.getClass().getMethods()) {
+            if (!wanted.contains(m.getName()) || m.getParameterCount() != 1) continue;
+            if (m.getParameterTypes()[0].isAssignableFrom(argument.getClass())) return m;
+        }
+        return null;
+    }
+
     /**
-     * Aplica texturas base64 a cabezas sin depender en compilacion de clases internas de Paper.
-     * Soporta la API de Paper (PlayerProfile/ProfileProperty) y deja fallback por reflexion.
+     * Aplica texturas custom a cabezas usando la API moderna de Bukkit/Paper por reflexion.
+     * En 1.21+ NO toca el campo interno profile con GameProfile, porque ahora puede ser
+     * ResolvableProfile y eso provoca IllegalArgumentException.
      */
-    private void applySkullTexture(SkullMeta skull, String base64) {
-        if (skull == null || base64 == null || base64.isBlank()) return;
-        String texture = base64.trim();
-        try {
-            Object profile = createPaperProfile();
-            if (profile != null) {
-                Class<?> propertyClass = Class.forName("com.destroystokyo.paper.profile.ProfileProperty");
-                Constructor<?> propertyCtor = propertyClass.getConstructor(String.class, String.class);
-                Object property = propertyCtor.newInstance("textures", texture);
+    private void applySkullTexture(SkullMeta skull, String textureValue) {
+        if (skull == null || textureValue == null || textureValue.isBlank()) return;
 
-                Method setProperty = null;
-                for (Method m : profile.getClass().getMethods()) {
-                    if (m.getName().equals("setProperty") && m.getParameterCount() == 1 && m.getParameterTypes()[0].isAssignableFrom(propertyClass)) {
-                        setProperty = m;
-                        break;
-                    }
-                }
-                if (setProperty == null) setProperty = profile.getClass().getMethod("setProperty", propertyClass);
-                setProperty.invoke(profile, property);
-
-                Method setPlayerProfile = null;
-                for (Method m : skull.getClass().getMethods()) {
-                    if (m.getName().equals("setPlayerProfile") && m.getParameterCount() == 1 && m.getParameterTypes()[0].isAssignableFrom(profile.getClass())) {
-                        setPlayerProfile = m;
-                        break;
-                    }
-                }
-                if (setPlayerProfile != null) {
-                    setPlayerProfile.invoke(skull, profile);
-                    return;
-                }
-            }
-        } catch (Throwable ignored) {
-            // Intentar fallback con GameProfile abajo.
+        String textureUrl = extractTextureUrl(textureValue.trim());
+        if (textureUrl == null || textureUrl.isBlank()) {
+            getLogger().warning("No se pudo aplicar textura custom de cabeza: textura invalida o Base64 sin URL.");
+            return;
         }
 
         try {
-            Class<?> gameProfileClass = Class.forName("com.mojang.authlib.GameProfile");
-            Class<?> propertyClass = Class.forName("com.mojang.authlib.properties.Property");
-            Object profile = gameProfileClass.getConstructor(UUID.class, String.class).newInstance(UUID.randomUUID(), "MDVSocial");
-            Object property = propertyClass.getConstructor(String.class, String.class).newInstance("textures", texture);
-            Object properties = gameProfileClass.getMethod("getProperties").invoke(profile);
-            properties.getClass().getMethod("put", Object.class, Object.class).invoke(properties, "textures", property);
+            Object profile = createModernProfile();
+            if (profile == null) throw new IllegalStateException("No profile factory available");
 
-            Field profileField = null;
-            Class<?> clazz = skull.getClass();
-            while (clazz != null && profileField == null) {
-                try {
-                    profileField = clazz.getDeclaredField("profile");
-                } catch (NoSuchFieldException ignored) {
-                    clazz = clazz.getSuperclass();
-                }
-            }
-            if (profileField != null) {
-                profileField.setAccessible(true);
-                profileField.set(skull, profile);
-            }
+            Method getTextures = profile.getClass().getMethod("getTextures");
+            Object textures = getTextures.invoke(profile);
+
+            Method setSkin = findOneArgMethod(textures, "setSkin");
+            if (setSkin == null) throw new IllegalStateException("No setSkin method available");
+            setSkin.invoke(textures, new URL(textureUrl));
+
+            Method setTextures = findCompatibleOneArgMethod(profile, textures, "setTextures");
+            if (setTextures != null) setTextures.invoke(profile, textures);
+
+            Method setProfile = findCompatibleOneArgMethod(skull, profile, "setOwnerProfile", "setPlayerProfile");
+            if (setProfile == null) throw new IllegalStateException("No skull profile setter available");
+            setProfile.invoke(skull, profile);
         } catch (Throwable ex) {
-            getLogger().warning("No se pudo aplicar textura custom de cabeza: " + ex.getClass().getSimpleName());
+            getLogger().warning("No se pudo aplicar textura custom de cabeza con PlayerProfile: " + ex.getClass().getSimpleName());
         }
     }
 
