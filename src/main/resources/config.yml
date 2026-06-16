@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.1.7
+# MDVSocial 1.2.0
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -22,6 +22,27 @@ messages:
   removed-title: '&eTitulo removido correctamente.'
   boss-radius-given: '&aTitulo entregado a &e{amount} &ajugadores cercanos.'
   title-not-player-equippable: '&cNo puedes equiparte ese titulo.'
+
+  mail-disabled: '&cEl sistema de cartas esta desactivado.'
+  mail-recipient-prompt: '&eEscribe el nombre del destinatario en el chat. Escribe &ccancelar &epara salir.'
+  mail-message-prompt: '&eAhora escribe el mensaje para &a{target}&e. Maximo &a{max} &ecaracteres. Escribe &ccancelar &epara salir.'
+  mail-block-prompt: '&eEscribe el nombre del jugador que quieres bloquear para cartas. Escribe &ccancelar &epara salir.'
+  mail-unblock-prompt: '&eEscribe el nombre del jugador que quieres desbloquear. Escribe &ccancelar &epara salir.'
+  mail-cancelled: '&7Accion de carta cancelada.'
+  mail-sent: '&aCarta enviada a &e{target}&a.'
+  mail-received: '&eHas recibido una carta nueva de &a{sender}&e. Usa &a/correo &epara leerla.'
+  mail-player-not-found: '&cNo encontre ese jugador. Debe haber entrado al servidor al menos una vez.'
+  mail-self: '&cNo puedes enviarte una carta a ti mismo.'
+  mail-self-block: '&cNo puedes bloquearte a ti mismo.'
+  mail-empty: '&cLa carta no puede estar vacia.'
+  mail-too-long: '&cLa carta es demasiado larga. Maximo: &e{max}&c caracteres.'
+  mail-full: '&cNo puedes enviar la carta. El buzon de &e{target} &cesta lleno (&e{limit}&c).'
+  mail-blocked-by-target: '&cNo puedes enviar cartas a &e{target}&c.'
+  mail-deleted: '&eCarta eliminada.'
+  mail-not-found: '&cEsa carta ya no existe.'
+  mail-blocked: '&eBloqueaste las cartas de &c{target}&e.'
+  mail-unblocked: '&aDesbloqueaste las cartas de &e{target}&a.'
+  mail-not-blocked: '&e{target} &7no estaba bloqueado.'
 
 settings:
   # Menu inicial que abre /social.
@@ -208,6 +229,84 @@ list-slots:
   - 42
   - 43
 
+
+
+# ==========================================================
+# Sistema de cartas MDVSocial
+# ==========================================================
+mail:
+  enabled: true
+  expire-after-days: 10
+  cleanup-interval-minutes: 30
+  default-mailbox-size: 10
+  max-message-length: 180
+  allow-unknown-targets: false
+
+  mailbox-size-permissions:
+    mdvsocial.mailbox.15: 15
+    mdvsocial.mailbox.25: 25
+    mdvsocial.mailbox.50: 50
+
+  date-format: 'dd/MM HH:mm'
+
+  menus:
+    mailbox:
+      title: '&8&lBuzon &7{count}/{limit}'
+      size: 54
+      slots:
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+        - 16
+        - 19
+        - 20
+        - 21
+        - 22
+        - 23
+        - 24
+        - 25
+        - 28
+        - 29
+        - 30
+        - 31
+        - 32
+        - 33
+        - 34
+        - 37
+        - 38
+        - 39
+        - 40
+        - 41
+        - 42
+        - 43
+    read:
+      title: '&8Carta de {sender}'
+      size: 27
+      back-slot: 11
+      letter-slot: 13
+      delete-slot: 15
+      block-slot: 16
+
+  items:
+    empty:
+      name: '&7Buzon vacio'
+      lore:
+        - '&8No tienes cartas guardadas.'
+    delete:
+      material: RED_DYE
+      name: '&c&lEliminar carta'
+      lore:
+        - '&7Elimina esta carta de tu buzon.'
+        - '&8Esta accion no se puede deshacer.'
+    block-sender:
+      material: BARRIER
+      name: '&c&lBloquear remitente'
+      lore:
+        - '&7Bloquea a este jugador para que'
+        - '&7no pueda enviarte mas cartas.'
 
 # ==========================================================
 # Puentes para GUIs externas

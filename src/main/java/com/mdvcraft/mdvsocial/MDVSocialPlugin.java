@@ -21,6 +21,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -38,6 +39,9 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.net.URL;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -51,6 +55,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public final class MDVSocialPlugin extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
@@ -60,9 +65,12 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private final Map<String, CustomMenuDef> customMenus = new HashMap<>();
     private final List<ExternalGuiAction> externalGuiActions = new ArrayList<>();
     private final List<Integer> listSlots = new ArrayList<>();
+    private final Map<UUID, MailComposeSession> mailSessions = new ConcurrentHashMap<>();
 
     private File dataFile;
     private YamlConfiguration data;
+    private File mailFile;
+    private YamlConfiguration mailData;
     private Economy economy;
 
     private org.bukkit.NamespacedKey keyAction;
@@ -71,6 +79,8 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private org.bukkit.NamespacedKey keyTargetMenu;
     private org.bukkit.NamespacedKey keyCommands;
     private org.bukkit.NamespacedKey keyCloseOnClick;
+    private org.bukkit.NamespacedKey keyMailId;
+    private org.bukkit.NamespacedKey keyMailSender;
 
     @Override
     public void onEnable() {
@@ -80,6 +90,8 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         keyTargetMenu = new org.bukkit.NamespacedKey(this, "target_menu");
         keyCommands = new org.bukkit.NamespacedKey(this, "commands");
         keyCloseOnClick = new org.bukkit.NamespacedKey(this, "close_on_click");
+        keyMailId = new org.bukkit.NamespacedKey(this, "mail_id");
+        keyMailSender = new org.bukkit.NamespacedKey(this, "mail_sender");
 
         saveDefaultConfig();
         loadAll();
@@ -89,6 +101,10 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         getCommand("social").setExecutor(this);
         getCommand("social").setTabCompleter(this);
         getCommand("titulos").setExecutor(this);
+        getCommand("correo").setExecutor(this);
+        getCommand("correo").setTabCompleter(this);
+        getCommand("carta").setExecutor(this);
+        getCommand("carta").setTabCompleter(this);
         getCommand("mdvsocial").setExecutor(this);
         getCommand("mdvsocial").setTabCompleter(this);
 
@@ -97,17 +113,23 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             getLogger().info("PlaceholderAPI detectado. Placeholders registrados.");
         }
 
-        getLogger().info("MDVSocial 1.1.7 habilitado.");
+        long cleanupMinutes = Math.max(5L, getConfig().getLong("mail.cleanup-interval-minutes", 30L));
+        Bukkit.getScheduler().runTaskTimer(this, this::cleanupExpiredMail, 20L * 60L, cleanupMinutes * 60L * 20L);
+
+        getLogger().info("MDVSocial 1.2.0 habilitado.");
     }
 
     @Override
     public void onDisable() {
         saveData();
+        saveMailData();
     }
 
     private void loadAll() {
         reloadConfig();
         loadData();
+        loadMailData();
+        cleanupExpiredMail();
         loadTitles();
         loadRanks();
         loadListSlots();
@@ -137,6 +159,30 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             data.save(dataFile);
         } catch (IOException e) {
             getLogger().severe("No se pudo guardar player-data.yml: " + e.getMessage());
+        }
+    }
+
+    private void loadMailData() {
+        if (!getDataFolder().exists()) {
+            getDataFolder().mkdirs();
+        }
+        mailFile = new File(getDataFolder(), "mail-data.yml");
+        if (!mailFile.exists()) {
+            try {
+                mailFile.createNewFile();
+            } catch (IOException e) {
+                getLogger().severe("No se pudo crear mail-data.yml: " + e.getMessage());
+            }
+        }
+        mailData = YamlConfiguration.loadConfiguration(mailFile);
+    }
+
+    private void saveMailData() {
+        if (mailData == null || mailFile == null) return;
+        try {
+            mailData.save(mailFile);
+        } catch (IOException e) {
+            getLogger().severe("No se pudo guardar mail-data.yml: " + e.getMessage());
         }
     }
 
@@ -234,6 +280,15 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                 return true;
             }
             handlePlayerTitleCommand(player, args);
+            return true;
+        }
+
+        if (cmd.equals("correo") || cmd.equals("carta")) {
+            if (!(sender instanceof Player player)) {
+                msg(sender, "only-players");
+                return true;
+            }
+            handleMailCommand(player, args);
             return true;
         }
 
@@ -413,6 +468,14 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                 getLogger().warning("No se pudo crear Menus/ayuda.yml: " + e.getMessage());
             }
         }
+        File correo = new File(folder, "correo.yml");
+        if (!correo.exists()) {
+            try {
+                Files.writeString(correo.toPath(), defaultCorreoMenuYaml(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                getLogger().warning("No se pudo crear Menus/correo.yml: " + e.getMessage());
+            }
+        }
     }
 
     private String defaultMainMenuYaml() {
@@ -550,6 +613,72 @@ items:
 """;
     }
 
+
+    private String defaultCorreoMenuYaml() {
+        return """
+title: '&8&lCorreo'
+size: 27
+items:
+  buzon:
+    slot: 11
+    material: CHEST
+    name: '&6&lBuzon'
+    lore:
+      - ''
+      - '&7Revisa las cartas que'
+      - '&7otros jugadores te enviaron.'
+      - ''
+      - '&eClick para abrir.'
+    action: OPEN_MAILBOX
+
+  enviar:
+    slot: 13
+    material: WRITABLE_BOOK
+    name: '&e&lEnviar carta'
+    lore:
+      - ''
+      - '&7Escribe una carta a otro'
+      - '&7jugador, incluso si no esta conectado.'
+      - ''
+      - '&eClick para comenzar.'
+    action: START_MAIL_SEND
+
+  bloquear:
+    slot: 15
+    material: RED_DYE
+    name: '&c&lBloquear cartas'
+    lore:
+      - ''
+      - '&7Bloquea a un jugador para'
+      - '&7que no pueda enviarte cartas.'
+      - ''
+      - '&eClick para escribir su nombre.'
+    action: START_MAIL_BLOCK
+
+  desbloquear:
+    slot: 16
+    material: LIME_DYE
+    name: '&a&lDesbloquear jugador'
+    lore:
+      - ''
+      - '&7Permite que un jugador bloqueado'
+      - '&7vuelva a enviarte cartas.'
+      - ''
+      - '&eClick para escribir su nombre.'
+    action: START_MAIL_UNBLOCK
+
+  volver:
+    slot: 22
+    material: PLAYER_HEAD
+    texture: 'eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmQ2OWUwNmU1ZGFkZmQ4NGU1ZjNkMWMyMTA2M2YyNTUzYjJmYTk0NWVlMWQ0ZDcxNTJmZGM1NDI1YmMxMmE5In19fQ=='
+    name: '&6&lVolver'
+    lore:
+      - '&7Regresa al menu social.'
+    action: OPEN_MENU
+    target-menu: menuamigos
+""";
+    }
+
     private void loadCustomMenus() {
         customMenus.clear();
         File folder = new File(getDataFolder(), "Menus");
@@ -642,6 +771,11 @@ items:
             openTitlesHome(player);
             return;
         }
+        if (menu.equals("correo") || menu.equals("mail") || menu.equals("cartas") || menu.equals("carta")) {
+            if (customMenus.containsKey("correo")) openCustomMenu(player, "correo", 1, "menuamigos", 1);
+            else openMailbox(player, 0);
+            return;
+        }
         if (menu.equals("mis_titulos") || menu.equals("my_titles") || menu.equals("my-titles")) {
             openTitleList(player, "MY_TITLES", Math.max(0, page - 1));
             return;
@@ -711,6 +845,10 @@ items:
             case "PREV_PAGE", "PREVIOUS", "PREVIOUS_PAGE" -> "PREVIOUS_PAGE";
             case "NEXT", "NEXT_PAGE" -> "NEXT_PAGE";
             case "OPEN_TITLE", "OPEN_TITLES", "TITLES" -> "OPEN_TITLES";
+            case "OPEN_MAIL", "OPEN_MAILBOX", "MAILBOX", "BUZON" -> "OPEN_MAILBOX";
+            case "START_MAIL", "START_MAIL_SEND", "SEND_MAIL", "ENVIAR_CARTA" -> "START_MAIL_SEND";
+            case "START_MAIL_BLOCK", "BLOCK_MAIL", "BLOQUEAR_CARTAS" -> "START_MAIL_BLOCK";
+            case "START_MAIL_UNBLOCK", "UNBLOCK_MAIL", "DESBLOQUEAR_CARTAS" -> "START_MAIL_UNBLOCK";
             default -> a;
         };
     }
@@ -900,6 +1038,506 @@ items:
         bar.append("&7");
         for (int i = filled; i < total; i++) bar.append("|");
         return bar.toString();
+    }
+
+
+    private boolean mailEnabled() {
+        return getConfig().getBoolean("mail.enabled", true);
+    }
+
+    private void handleMailCommand(Player player, String[] args) {
+        if (!mailEnabled()) {
+            msg(player, "mail-disabled");
+            return;
+        }
+        if (!player.hasPermission("mdvsocial.mail.use")) {
+            msg(player, "no-permission");
+            return;
+        }
+        if (args.length == 0) {
+            if (customMenus.containsKey("correo")) openCustomMenu(player, "correo", 1, "menuamigos", 1);
+            else openMailbox(player, 0);
+            return;
+        }
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        switch (sub) {
+            case "buzon", "mailbox", "recibidas" -> openMailbox(player, 0);
+            case "enviar", "send" -> {
+                if (!player.hasPermission("mdvsocial.mail.send")) {
+                    msg(player, "no-permission");
+                    return;
+                }
+                if (args.length >= 3) {
+                    String targetName = args[1];
+                    String message = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
+                    sendMailByName(player, targetName, message);
+                } else {
+                    startMailRecipientPrompt(player);
+                }
+            }
+            case "bloquear", "block" -> {
+                if (args.length >= 2) blockMailByName(player, args[1]);
+                else startMailBlockPrompt(player, true);
+            }
+            case "desbloquear", "unblock" -> {
+                if (args.length >= 2) unblockMailByName(player, args[1]);
+                else startMailBlockPrompt(player, false);
+            }
+            case "bloqueados", "blocked" -> sendBlockedList(player);
+            case "cancelar", "cancel" -> {
+                mailSessions.remove(player.getUniqueId());
+                msg(player, "mail-cancelled");
+            }
+            default -> {
+                player.sendMessage(color(getPrefix() + "&e/correo &7- abre el menu de correo"));
+                player.sendMessage(color(getPrefix() + "&e/carta enviar <jugador> <mensaje>"));
+                player.sendMessage(color(getPrefix() + "&e/carta bloquear <jugador>"));
+                player.sendMessage(color(getPrefix() + "&e/carta desbloquear <jugador>"));
+            }
+        }
+    }
+
+    private void startMailRecipientPrompt(Player player) {
+        if (!mailEnabled()) { msg(player, "mail-disabled"); return; }
+        if (!player.hasPermission("mdvsocial.mail.send")) { msg(player, "no-permission"); return; }
+        mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.RECIPIENT, null));
+        msg(player, "mail-recipient-prompt");
+    }
+
+    private void startMailBlockPrompt(Player player, boolean block) {
+        mailSessions.put(player.getUniqueId(), new MailComposeSession(block ? MailStage.BLOCK : MailStage.UNBLOCK, null));
+        msg(player, block ? "mail-block-prompt" : "mail-unblock-prompt");
+    }
+
+    @EventHandler
+    public void onMailChat(AsyncPlayerChatEvent event) {
+        Player player = event.getPlayer();
+        MailComposeSession session = mailSessions.get(player.getUniqueId());
+        if (session == null) return;
+        event.setCancelled(true);
+        String text = event.getMessage() == null ? "" : event.getMessage().trim();
+        Bukkit.getScheduler().runTask(this, () -> handleMailChatInput(player, text));
+    }
+
+    private void handleMailChatInput(Player player, String text) {
+        MailComposeSession session = mailSessions.get(player.getUniqueId());
+        if (session == null) return;
+        if (text.equalsIgnoreCase("cancelar") || text.equalsIgnoreCase("cancel")) {
+            mailSessions.remove(player.getUniqueId());
+            msg(player, "mail-cancelled");
+            return;
+        }
+        if (session.stage == MailStage.RECIPIENT) {
+            OfflinePlayer target = findKnownOfflinePlayer(text);
+            if (target == null) {
+                msg(player, "mail-player-not-found");
+                return;
+            }
+            if (target.getUniqueId().equals(player.getUniqueId())) {
+                msg(player, "mail-self");
+                return;
+            }
+            mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.MESSAGE, target.getName() == null ? text : target.getName()));
+            msg(player, "mail-message-prompt", Map.of("target", target.getName() == null ? text : target.getName(), "max", String.valueOf(getMaxMailLength())));
+            return;
+        }
+        if (session.stage == MailStage.MESSAGE) {
+            String targetName = session.targetName;
+            mailSessions.remove(player.getUniqueId());
+            sendMailByName(player, targetName, text);
+            return;
+        }
+        if (session.stage == MailStage.BLOCK) {
+            mailSessions.remove(player.getUniqueId());
+            blockMailByName(player, text);
+            return;
+        }
+        if (session.stage == MailStage.UNBLOCK) {
+            mailSessions.remove(player.getUniqueId());
+            unblockMailByName(player, text);
+        }
+    }
+
+    private OfflinePlayer findKnownOfflinePlayer(String name) {
+        if (name == null || name.isBlank()) return null;
+        Player online = Bukkit.getPlayerExact(name);
+        if (online != null) return online;
+        OfflinePlayer off = Bukkit.getOfflinePlayer(name);
+        boolean allowUnknown = getConfig().getBoolean("mail.allow-unknown-targets", false);
+        if (allowUnknown || off.hasPlayedBefore()) return off;
+        return null;
+    }
+
+    private void sendMailByName(Player sender, String targetName, String message) {
+        OfflinePlayer target = findKnownOfflinePlayer(targetName);
+        if (target == null) {
+            msg(sender, "mail-player-not-found");
+            return;
+        }
+        sendMail(sender, target, message);
+    }
+
+    private void sendMail(Player sender, OfflinePlayer target, String message) {
+        if (!mailEnabled()) { msg(sender, "mail-disabled"); return; }
+        if (!sender.hasPermission("mdvsocial.mail.send")) { msg(sender, "no-permission"); return; }
+        if (target.getUniqueId().equals(sender.getUniqueId())) { msg(sender, "mail-self"); return; }
+        String clean = sanitizeMailMessage(message);
+        if (clean.isBlank()) {
+            msg(sender, "mail-empty");
+            return;
+        }
+        int max = getMaxMailLength();
+        if (clean.length() > max) {
+            msg(sender, "mail-too-long", Map.of("max", String.valueOf(max)));
+            return;
+        }
+        if (isMailBlocked(target.getUniqueId(), sender.getUniqueId())) {
+            msg(sender, "mail-blocked-by-target", Map.of("target", target.getName() == null ? "ese jugador" : target.getName()));
+            return;
+        }
+        int limit = getMailboxLimit(target);
+        int count = getMailIds(target.getUniqueId()).size();
+        if (count >= limit) {
+            msg(sender, "mail-full", Map.of("target", target.getName() == null ? "ese jugador" : target.getName(), "limit", String.valueOf(limit)));
+            return;
+        }
+        String id = UUID.randomUUID().toString();
+        long now = System.currentTimeMillis();
+        long expiresAt = now + getMailExpireMillis();
+        String base = mailPath(target.getUniqueId(), "letters." + id);
+        mailData.set(base + ".from-uuid", sender.getUniqueId().toString());
+        mailData.set(base + ".from-name", sender.getName());
+        mailData.set(base + ".to-name", target.getName() == null ? target.getName() : target.getName());
+        mailData.set(base + ".message", clean);
+        mailData.set(base + ".sent-at", now);
+        mailData.set(base + ".expires-at", expiresAt);
+        mailData.set(base + ".read", false);
+        saveMailData();
+        msg(sender, "mail-sent", Map.of("target", target.getName() == null ? "jugador" : target.getName()));
+    }
+
+    private String sanitizeMailMessage(String message) {
+        if (message == null) return "";
+        return message.replace('\n', ' ').replace('\r', ' ').trim();
+    }
+
+    private int getMaxMailLength() {
+        return Math.max(20, getConfig().getInt("mail.max-message-length", 180));
+    }
+
+    private long getMailExpireMillis() {
+        long days = Math.max(1L, getConfig().getLong("mail.expire-after-days", 10L));
+        return days * 24L * 60L * 60L * 1000L;
+    }
+
+    private int getMailboxLimit(OfflinePlayer player) {
+        int limit = Math.max(1, getConfig().getInt("mail.default-mailbox-size", 10));
+        if (player != null && player.isOnline()) {
+            ConfigurationSection sec = getConfig().getConfigurationSection("mail.mailbox-size-permissions");
+            if (sec != null) {
+                Player online = player.getPlayer();
+                for (String perm : sec.getKeys(false)) {
+                    int value = sec.getInt(perm, limit);
+                    if (online.hasPermission(perm) && value > limit) limit = value;
+                }
+            }
+        }
+        return limit;
+    }
+
+    private String mailPath(UUID uuid, String child) {
+        return "mailbox." + uuid + "." + child;
+    }
+
+    private List<String> getMailIds(UUID uuid) {
+        cleanupExpiredMailFor(uuid);
+        ConfigurationSection sec = mailData.getConfigurationSection(mailPath(uuid, "letters"));
+        if (sec == null) return new ArrayList<>();
+        List<String> ids = new ArrayList<>(sec.getKeys(false));
+        ids.sort((a, b) -> Long.compare(mailData.getLong(mailPath(uuid, "letters." + b + ".sent-at"), 0L), mailData.getLong(mailPath(uuid, "letters." + a + ".sent-at"), 0L)));
+        return ids;
+    }
+
+    private void cleanupExpiredMail() {
+        if (mailData == null) return;
+        ConfigurationSection mailboxes = mailData.getConfigurationSection("mailbox");
+        if (mailboxes == null) return;
+        boolean changed = false;
+        for (String uuidText : mailboxes.getKeys(false)) {
+            try {
+                UUID uuid = UUID.fromString(uuidText);
+                if (cleanupExpiredMailFor(uuid)) changed = true;
+            } catch (Exception ignored) { }
+        }
+        if (changed) saveMailData();
+    }
+
+    private boolean cleanupExpiredMailFor(UUID uuid) {
+        if (mailData == null) return false;
+        ConfigurationSection sec = mailData.getConfigurationSection(mailPath(uuid, "letters"));
+        if (sec == null) return false;
+        long now = System.currentTimeMillis();
+        boolean changed = false;
+        for (String id : new ArrayList<>(sec.getKeys(false))) {
+            long expires = mailData.getLong(mailPath(uuid, "letters." + id + ".expires-at"), 0L);
+            if (expires > 0 && expires <= now) {
+                mailData.set(mailPath(uuid, "letters." + id), null);
+                changed = true;
+            }
+        }
+        if (changed) saveMailData();
+        return changed;
+    }
+
+    private void openMailbox(Player player, int page) {
+        if (!mailEnabled()) { msg(player, "mail-disabled"); return; }
+        if (!player.hasPermission("mdvsocial.mail.read")) { msg(player, "no-permission"); return; }
+        List<String> ids = getMailIds(player.getUniqueId());
+        List<Integer> slots = getMailSlots();
+        int size = normalizeMenuSize(getConfig().getInt("mail.menus.mailbox.size", 54));
+        int perPage = Math.max(1, slots.size());
+        int maxPage = Math.max(0, (int) Math.ceil(ids.size() / (double) perPage) - 1);
+        page = Math.max(0, Math.min(page, maxPage));
+        String title = getConfig().getString("mail.menus.mailbox.title", "&8Buzon {page}/{max_page}")
+                .replace("{page}", String.valueOf(page + 1))
+                .replace("{max_page}", String.valueOf(maxPage + 1))
+                .replace("{count}", String.valueOf(ids.size()))
+                .replace("{limit}", String.valueOf(getMailboxLimit(player)));
+        Inventory inv = createMenu("MAILBOX", size, title, page);
+        fill(inv);
+        int start = page * perPage;
+        for (int i = 0; i < perPage; i++) {
+            int index = start + i;
+            if (index >= ids.size()) break;
+            int slot = slots.get(i);
+            if (slot >= 0 && slot < inv.getSize()) inv.setItem(slot, mailItem(player, ids.get(index)));
+        }
+        if (ids.isEmpty()) inv.setItem(size / 2, emptyMailboxItem());
+        if (page > 0) inv.setItem(size - 9, navItem("previous-page", "PREVIOUS_PAGE"));
+        inv.setItem(size - 5, navItem("back", "OPEN_MENU"));
+        setTargetMenuOnItem(inv, size - 5, "correo");
+        if (page < maxPage) inv.setItem(size - 1, navItem("next-page", "NEXT_PAGE"));
+        else inv.setItem(size - 1, navItem("close", "CLOSE"));
+        player.openInventory(inv);
+    }
+
+    private List<Integer> getMailSlots() {
+        List<Integer> slots = getConfig().getIntegerList("mail.menus.mailbox.slots");
+        if (slots == null || slots.isEmpty()) return new ArrayList<>(listSlots);
+        return slots.stream().filter(i -> i >= 0 && i < 54).collect(Collectors.toList());
+    }
+
+    private ItemStack emptyMailboxItem() {
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(color(getConfig().getString("mail.items.empty.name", "&7Buzon vacio")));
+        List<String> lore = getConfig().getStringList("mail.items.empty.lore");
+        if (lore.isEmpty()) lore = List.of("&8No tienes cartas guardadas.");
+        meta.setLore(lore.stream().map(this::color).collect(Collectors.toList()));
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private ItemStack mailItem(Player viewer, String id) {
+        String base = mailPath(viewer.getUniqueId(), "letters." + id);
+        String fromName = mailData.getString(base + ".from-name", "Desconocido");
+        String fromUuidText = mailData.getString(base + ".from-uuid", "");
+        String message = mailData.getString(base + ".message", "");
+        boolean read = mailData.getBoolean(base + ".read", false);
+        long sentAt = mailData.getLong(base + ".sent-at", 0L);
+        long expiresAt = mailData.getLong(base + ".expires-at", 0L);
+
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta skull = (SkullMeta) item.getItemMeta();
+        try {
+            if (!fromUuidText.isBlank()) skull.setOwningPlayer(Bukkit.getOfflinePlayer(UUID.fromString(fromUuidText)));
+            else skull.setOwningPlayer(Bukkit.getOfflinePlayer(fromName));
+        } catch (Throwable ignored) {
+            skull.setOwningPlayer(Bukkit.getOfflinePlayer(fromName));
+        }
+        skull.setDisplayName(color((read ? "&eCarta de &f" : "&aNueva carta de &f") + fromName));
+        List<String> lore = new ArrayList<>();
+        lore.add(color(""));
+        lore.add(color("&7Enviada: &e" + formatTime(sentAt)));
+        lore.add(color("&7Expira: &c" + daysLeftText(expiresAt)));
+        lore.add(color(""));
+        lore.add(color("&8\"" + shorten(message, 34) + "\""));
+        lore.add(color(""));
+        lore.add(color("&eClick para leer."));
+        skull.setLore(lore);
+        skull.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, "READ_MAIL");
+        skull.getPersistentDataContainer().set(keyMailId, PersistentDataType.STRING, id);
+        item.setItemMeta(skull);
+        return item;
+    }
+
+    private void openMailRead(Player player, String id, int page) {
+        if (id == null || id.isBlank() || !mailData.contains(mailPath(player.getUniqueId(), "letters." + id))) {
+            msg(player, "mail-not-found");
+            openMailbox(player, page);
+            return;
+        }
+        String base = mailPath(player.getUniqueId(), "letters." + id);
+        mailData.set(base + ".read", true);
+        saveMailData();
+        String fromName = mailData.getString(base + ".from-name", "Desconocido");
+        String fromUuid = mailData.getString(base + ".from-uuid", "");
+        String message = mailData.getString(base + ".message", "");
+        long sentAt = mailData.getLong(base + ".sent-at", 0L);
+        long expiresAt = mailData.getLong(base + ".expires-at", 0L);
+
+        int size = normalizeMenuSize(getConfig().getInt("mail.menus.read.size", 27));
+        String title = getConfig().getString("mail.menus.read.title", "&8Carta de {sender}").replace("{sender}", fromName);
+        MenuHolder holder = new MenuHolder("MAIL_READ", page);
+        Inventory inv = Bukkit.createInventory(holder, size, color(title));
+        holder.inventory = inv;
+        fill(inv);
+
+        ItemStack letter = new ItemStack(Material.WRITTEN_BOOK);
+        ItemMeta meta = letter.getItemMeta();
+        meta.setDisplayName(color("&e&lCarta de &f" + fromName));
+        List<String> lore = new ArrayList<>();
+        lore.add(color(""));
+        lore.add(color("&7Enviada: &e" + formatTime(sentAt)));
+        lore.add(color("&7Expira: &c" + daysLeftText(expiresAt)));
+        lore.add(color(""));
+        for (String line : wrapText(message, 38)) lore.add(color("&f" + line));
+        meta.setLore(lore);
+        letter.setItemMeta(meta);
+        inv.setItem(getConfig().getInt("mail.menus.read.letter-slot", 13), letter);
+
+        inv.setItem(getConfig().getInt("mail.menus.read.back-slot", 11), mailActionItem("items.back", "MAIL_BACK", id, fromUuid));
+        inv.setItem(getConfig().getInt("mail.menus.read.delete-slot", 15), mailActionItem("mail.items.delete", "DELETE_MAIL", id, fromUuid));
+        inv.setItem(getConfig().getInt("mail.menus.read.block-slot", 16), mailActionItem("mail.items.block-sender", "BLOCK_MAIL_SENDER", id, fromUuid));
+        player.openInventory(inv);
+    }
+
+    private ItemStack mailActionItem(String path, String action, String mailId, String senderUuid) {
+        ItemStack item = itemFromSection(getConfig().getConfigurationSection(path), action, null);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            if (mailId != null && !mailId.isBlank()) meta.getPersistentDataContainer().set(keyMailId, PersistentDataType.STRING, mailId);
+            if (senderUuid != null && !senderUuid.isBlank()) meta.getPersistentDataContainer().set(keyMailSender, PersistentDataType.STRING, senderUuid);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private void setTargetMenuOnItem(Inventory inv, int slot, String target) {
+        ItemStack item = inv.getItem(slot);
+        if (item == null || !item.hasItemMeta()) return;
+        ItemMeta meta = item.getItemMeta();
+        meta.getPersistentDataContainer().set(keyTargetMenu, PersistentDataType.STRING, target);
+        item.setItemMeta(meta);
+    }
+
+    private void deleteMail(Player player, String id) {
+        if (!player.hasPermission("mdvsocial.mail.delete")) { msg(player, "no-permission"); return; }
+        if (id == null || id.isBlank() || !mailData.contains(mailPath(player.getUniqueId(), "letters." + id))) {
+            msg(player, "mail-not-found");
+            return;
+        }
+        mailData.set(mailPath(player.getUniqueId(), "letters." + id), null);
+        saveMailData();
+        msg(player, "mail-deleted");
+    }
+
+    private void blockMailSender(Player player, String senderUuidText) {
+        if (senderUuidText == null || senderUuidText.isBlank()) return;
+        try {
+            UUID uuid = UUID.fromString(senderUuidText);
+            addBlockedMail(player.getUniqueId(), uuid);
+            OfflinePlayer off = Bukkit.getOfflinePlayer(uuid);
+            msg(player, "mail-blocked", Map.of("target", off.getName() == null ? "jugador" : off.getName()));
+        } catch (Exception ignored) { }
+    }
+
+    private void blockMailByName(Player player, String targetName) {
+        OfflinePlayer target = findKnownOfflinePlayer(targetName);
+        if (target == null) { msg(player, "mail-player-not-found"); return; }
+        if (target.getUniqueId().equals(player.getUniqueId())) { msg(player, "mail-self-block"); return; }
+        addBlockedMail(player.getUniqueId(), target.getUniqueId());
+        msg(player, "mail-blocked", Map.of("target", target.getName() == null ? targetName : target.getName()));
+    }
+
+    private void unblockMailByName(Player player, String targetName) {
+        OfflinePlayer target = findKnownOfflinePlayer(targetName);
+        if (target == null) { msg(player, "mail-player-not-found"); return; }
+        List<String> list = new ArrayList<>(mailData.getStringList(mailPath(player.getUniqueId(), "blocked")));
+        boolean removed = list.remove(target.getUniqueId().toString());
+        mailData.set(mailPath(player.getUniqueId(), "blocked"), list);
+        saveMailData();
+        msg(player, removed ? "mail-unblocked" : "mail-not-blocked", Map.of("target", target.getName() == null ? targetName : target.getName()));
+    }
+
+    private boolean isMailBlocked(UUID recipient, UUID sender) {
+        return mailData.getStringList(mailPath(recipient, "blocked")).contains(sender.toString());
+    }
+
+    private void addBlockedMail(UUID recipient, UUID sender) {
+        List<String> list = new ArrayList<>(mailData.getStringList(mailPath(recipient, "blocked")));
+        if (!list.contains(sender.toString())) list.add(sender.toString());
+        mailData.set(mailPath(recipient, "blocked"), list);
+        saveMailData();
+    }
+
+    private void sendBlockedList(Player player) {
+        List<String> list = mailData.getStringList(mailPath(player.getUniqueId(), "blocked"));
+        if (list.isEmpty()) {
+            player.sendMessage(color(getPrefix() + "&7No tienes jugadores bloqueados para cartas."));
+            return;
+        }
+        player.sendMessage(color(getPrefix() + "&eJugadores bloqueados:"));
+        for (String uuidText : list) {
+            try {
+                OfflinePlayer off = Bukkit.getOfflinePlayer(UUID.fromString(uuidText));
+                player.sendMessage(color("&8- &f" + (off.getName() == null ? uuidText : off.getName())));
+            } catch (Exception ignored) {
+                player.sendMessage(color("&8- &f" + uuidText));
+            }
+        }
+    }
+
+    private String formatTime(long millis) {
+        if (millis <= 0) return "desconocido";
+        try {
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern(getConfig().getString("mail.date-format", "dd/MM HH:mm")).withZone(ZoneId.systemDefault());
+            return fmt.format(Instant.ofEpochMilli(millis));
+        } catch (Exception e) {
+            return String.valueOf(millis);
+        }
+    }
+
+    private String daysLeftText(long expiresAt) {
+        long diff = expiresAt - System.currentTimeMillis();
+        if (diff <= 0) return "expirada";
+        long days = diff / (24L * 60L * 60L * 1000L);
+        long hours = (diff / (60L * 60L * 1000L)) % 24L;
+        if (days > 0) return days + "d " + hours + "h";
+        return Math.max(1, diff / (60L * 60L * 1000L)) + "h";
+    }
+
+    private String shorten(String text, int max) {
+        if (text == null) return "";
+        if (text.length() <= max) return text;
+        return text.substring(0, Math.max(0, max - 3)) + "...";
+    }
+
+    private List<String> wrapText(String text, int maxLen) {
+        List<String> lines = new ArrayList<>();
+        if (text == null || text.isBlank()) return lines;
+        StringBuilder line = new StringBuilder();
+        for (String word : text.split(" ")) {
+            if (line.length() + word.length() + 1 > maxLen) {
+                lines.add(line.toString());
+                line = new StringBuilder(word);
+            } else {
+                if (line.length() > 0) line.append(' ');
+                line.append(word);
+            }
+        }
+        if (line.length() > 0) lines.add(line.toString());
+        return lines;
     }
 
     private void sendTitleHelp(CommandSender sender) {
@@ -1230,6 +1868,10 @@ items:
                 else openSocialStart(player);
             }
             case "COMMAND_PLAYER" -> runPlayerCommandsFromPdc(player, pdc);
+            case "OPEN_MAILBOX" -> openMailbox(player, 0);
+            case "START_MAIL_SEND" -> startMailRecipientPrompt(player);
+            case "START_MAIL_BLOCK" -> startMailBlockPrompt(player, true);
+            case "START_MAIL_UNBLOCK" -> startMailBlockPrompt(player, false);
             case "CLEAR_TITLE" -> {
                 clearActiveTitle(player);
                 openTitlesHome(player);
@@ -1253,6 +1895,21 @@ items:
                 openTitleList(player, "SHOP", holder.page);
             }
             case "LOCKED_TITLE" -> msg(player, "title-locked");
+            case "READ_MAIL" -> {
+                String mailId = pdc.get(keyMailId, PersistentDataType.STRING);
+                openMailRead(player, mailId, holder.page);
+            }
+            case "DELETE_MAIL" -> {
+                String mailId = pdc.get(keyMailId, PersistentDataType.STRING);
+                deleteMail(player, mailId);
+                openMailbox(player, holder.page);
+            }
+            case "MAIL_BACK" -> openMailbox(player, holder.page);
+            case "BLOCK_MAIL_SENDER" -> {
+                String senderUuid = pdc.get(keyMailSender, PersistentDataType.STRING);
+                blockMailSender(player, senderUuid);
+                player.closeInventory();
+            }
             case "COMMANDS" -> runConfiguredCommands(player, pdc.get(keyMenu, PersistentDataType.STRING));
             default -> { }
         }
@@ -1265,6 +1922,7 @@ items:
 
     private void openSamePagedMenu(Player player, String type, int page) {
         if (type.equals("RANKS")) openRanks(player, page);
+        else if (type.equals("MAILBOX")) openMailbox(player, page);
         else if (type.equals("MY_TITLES") || type.equals("SHOP") || type.equals("LOCKED")) openTitleList(player, type, page);
     }
 
@@ -1531,6 +2189,14 @@ items:
             return Collections.emptyList();
         }
 
+        if (commandName.equals("correo") || commandName.equals("carta")) {
+            if (args.length == 1) return partial(args[0], Arrays.asList("buzon", "enviar", "bloquear", "desbloquear", "bloqueados", "cancelar"));
+            if (args.length == 2 && Arrays.asList("enviar", "bloquear", "desbloquear").contains(args[0].toLowerCase(Locale.ROOT))) {
+                return null;
+            }
+            return Collections.emptyList();
+        }
+
         if (!commandName.equals("mdvsocial")) return Collections.emptyList();
         if (args.length == 1) return partial(args[0], Arrays.asList("reload", "open", "title"));
         if (args.length == 3 && args[0].equalsIgnoreCase("open")) {
@@ -1656,6 +2322,18 @@ items:
             this.targetMenu = targetMenu == null ? "" : targetMenu;
             this.commands = commands == null ? Collections.emptyList() : commands;
             this.closeOnClick = closeOnClick;
+        }
+    }
+
+
+    enum MailStage { RECIPIENT, MESSAGE, BLOCK, UNBLOCK }
+
+    static final class MailComposeSession {
+        final MailStage stage;
+        final String targetName;
+        MailComposeSession(MailStage stage, String targetName) {
+            this.stage = stage;
+            this.targetName = targetName;
         }
     }
 
