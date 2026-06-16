@@ -1,4 +1,4 @@
-# MDVSocial 1.1.1
+# MDVSocial 1.1.4
 
 Plugin social inicial para MDVCRAFT.
 
@@ -191,10 +191,49 @@ El proyecto trae `.github/workflows/maven.yml`.
 
 Sube el proyecto a GitHub y compila desde Actions.
 
-## 1.1.1 - PlaceholderAPI en menus
-Los menus modulares ahora parsean PlaceholderAPI en `name`, `lore` y comandos `COMMAND_PLAYER`.
+## 1.1.4 - Cabezas custom en menus
 
-Atajos disponibles en menus:
+Esta version agrega texturas base64 para cualquier item de menu que use `material: PLAYER_HEAD`.
+
+Funciona en:
+
+```yaml
+items:
+  back:
+    material: PLAYER_HEAD
+    custom-head-texture: 'BASE64'
+    name: '&6Volver'
+```
+
+Y tambien en menus de `plugins/MDVSocial/Menus/`:
+
+```yaml
+volver:
+  slot: 18
+  material: PLAYER_HEAD
+  texture: 'BASE64'
+  name: '&6Volver'
+  action: BACK
+```
+
+Aliases aceptados:
+
+```yaml
+custom-head-texture: 'BASE64'
+texture: 'BASE64'
+head-texture: 'BASE64'
+skull-texture: 'BASE64'
+texture-base64: 'BASE64'
+```
+
+Si una cabeza tiene textura, se usa la textura. Si no tiene textura pero tiene `head-owner`, se usa la cabeza del jugador indicado.
+
+## 1.1.4 - PlaceholderAPI en menus
+
+Los menus modulares parsean PlaceholderAPI en `name`, `lore` y comandos `COMMAND_PLAYER`.
+
+Atajos disponibles:
+
 - `{player}`
 - `{level}` -> `%mmocore_level%`
 - `{exp}` / `{experience}` -> `%mmocore_experience%`
@@ -207,9 +246,9 @@ Atajos disponibles en menus:
 
 Tambien puedes usar placeholders PAPI directamente, por ejemplo `%mmocore_level%`.
 
-## 1.1.2 - Titulo obligatorio / Forastero invisible
+## 1.1.4 - Titulo obligatorio / Forastero visible
 
-Esta version agrega soporte para titulo obligatorio:
+Configuracion recomendada:
 
 ```yaml
 settings:
@@ -217,16 +256,16 @@ settings:
   allow-clear-title: false
   default-title: forastero
   default-unlocked-titles:
-    - forastero
     - aventurero
   hide-default-title-in-menus: true
   hidden-titles:
     - forastero
 ```
 
-- `forastero` es el titulo base invisible. Tiene prefix vacio y no aparece en menus.
+- `forastero` funciona como titulo por defecto visible en chat.
+- `forastero` queda oculto de menus y no es equipable por jugadores si usa `player-equippable: false`.
 - `aventurero` queda desbloqueado para todos y puede equiparse despues.
-- Si el jugador no tiene titulo activo, el placeholder usa `forastero` como fallback.
+- Jugadores nuevos sin titulo activo usan `settings.default-title: forastero` sin necesidad de guardarlo en `player-data.yml`.
 - Si `allow-clear-title` es false, el jugador no puede quedarse sin titulo con `/titulo quitar`.
 
 Para equipar Aventurero al elegir raza desde MMOCore:
@@ -236,11 +275,3 @@ triggers:
   class-chosen:
   - 'command{format="mdvsocial title set %player_name% aventurero"}'
 ```
-
-
-## Cambio 1.1.3
-
-- `forastero` puede funcionar como título por defecto visible en chat.
-- `forastero` queda oculto de menús y no es equipable por jugadores si usa `player-equippable: false`.
-- `aventurero` puede quedar como título desbloqueado para todos y equipable después de elegir raza.
-- Jugadores nuevos sin título activo usan `settings.default-title: forastero` sin necesidad de guardarlo en `player-data.yml`.

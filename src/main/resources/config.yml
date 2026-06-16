@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.1.2
+# MDVSocial 1.1.4
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -215,6 +215,8 @@ list-slots:
 #   prefix: prefijo para PlaceholderAPI
 #   material: item del menu
 #   custom-head-texture: ''  # opcional, base64 texture de cabeza
+#   texture: ''              # alias de custom-head-texture
+#   head-texture: ''         # alias de custom-head-texture
 #   purchasable: true/false
 #   price: 500
 #   unlock-permission: 'mdvsocial.title.noble' # opcional, para VIP/rangos

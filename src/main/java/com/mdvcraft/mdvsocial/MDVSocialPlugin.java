@@ -33,6 +33,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -90,7 +93,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             getLogger().info("PlaceholderAPI detectado. Placeholders registrados.");
         }
 
-        getLogger().info("MDVSocial 1.1.2 habilitado.");
+        getLogger().info("MDVSocial 1.1.4 habilitado.");
     }
 
     @Override
@@ -146,6 +149,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                     t.getString("prefix", ""),
                     t.getString("material", "NAME_TAG"),
                     t.getString("head-owner", ""),
+                    readTexture(t),
                     t.getBoolean("purchasable", false),
                     t.getDouble("price", 0),
                     t.getString("unlock-permission", ""),
@@ -598,6 +602,7 @@ items:
                     sec.getString("name", sec.getString("display", "")),
                     sec.getStringList("lore"),
                     sec.getString("head-owner", ""),
+                    readTexture(sec),
                     action,
                     target,
                     commands,
@@ -654,12 +659,17 @@ items:
         int amount = Math.max(1, Math.min(64, def.amount));
         ItemStack item = new ItemStack(mat, amount);
         ItemMeta meta = item.getItemMeta();
-        if (mat == Material.PLAYER_HEAD && meta instanceof SkullMeta skull && def.headOwner != null && !def.headOwner.isBlank()) {
-            OfflinePlayer owner = Bukkit.getOfflinePlayer(def.headOwner.replace("{player}", player.getName()));
-            skull.setOwningPlayer(owner);
+        if (meta == null) return item;
+        if (mat == Material.PLAYER_HEAD && meta instanceof SkullMeta skull) {
+            String texture = applyPlayerPlaceholders(def.texture, player);
+            if (texture != null && !texture.isBlank()) {
+                applySkullTexture(skull, texture);
+            } else if (def.headOwner != null && !def.headOwner.isBlank()) {
+                OfflinePlayer owner = Bukkit.getOfflinePlayer(applyPlayerPlaceholders(def.headOwner, player));
+                skull.setOwningPlayer(owner);
+            }
             meta = skull;
         }
-        if (meta == null) return item;
         if (def.name != null && !def.name.isBlank()) meta.setDisplayName(color(applyPlayerPlaceholders(def.name, player)));
         List<String> lore = new ArrayList<>();
         for (String line : def.lore) lore.add(color(applyPlayerPlaceholders(line, player)));
@@ -670,6 +680,99 @@ items:
         meta.getPersistentDataContainer().set(keyCloseOnClick, PersistentDataType.STRING, String.valueOf(def.closeOnClick));
         item.setItemMeta(meta);
         return item;
+    }
+
+    private String readTexture(ConfigurationSection sec) {
+        if (sec == null) return "";
+        String texture = sec.getString("custom-head-texture", "");
+        if (texture == null || texture.isBlank()) texture = sec.getString("texture", "");
+        if (texture == null || texture.isBlank()) texture = sec.getString("head-texture", "");
+        if (texture == null || texture.isBlank()) texture = sec.getString("skull-texture", "");
+        if (texture == null || texture.isBlank()) texture = sec.getString("texture-base64", "");
+        return texture == null ? "" : texture.trim();
+    }
+
+    private Object createPaperProfile() throws Exception {
+        for (Method m : Bukkit.class.getMethods()) {
+            if (!m.getName().equals("createProfile")) continue;
+            Class<?>[] params = m.getParameterTypes();
+            if (params.length == 2 && params[0] == UUID.class && params[1] == String.class) {
+                return m.invoke(null, UUID.randomUUID(), "MDVSocial");
+            }
+            if (params.length == 1 && params[0] == UUID.class) {
+                return m.invoke(null, UUID.randomUUID());
+            }
+            if (params.length == 1 && params[0] == String.class) {
+                return m.invoke(null, "MDVSocial");
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Aplica texturas base64 a cabezas sin depender en compilacion de clases internas de Paper.
+     * Soporta la API de Paper (PlayerProfile/ProfileProperty) y deja fallback por reflexion.
+     */
+    private void applySkullTexture(SkullMeta skull, String base64) {
+        if (skull == null || base64 == null || base64.isBlank()) return;
+        String texture = base64.trim();
+        try {
+            Object profile = createPaperProfile();
+            if (profile != null) {
+                Class<?> propertyClass = Class.forName("com.destroystokyo.paper.profile.ProfileProperty");
+                Constructor<?> propertyCtor = propertyClass.getConstructor(String.class, String.class);
+                Object property = propertyCtor.newInstance("textures", texture);
+
+                Method setProperty = null;
+                for (Method m : profile.getClass().getMethods()) {
+                    if (m.getName().equals("setProperty") && m.getParameterCount() == 1 && m.getParameterTypes()[0].isAssignableFrom(propertyClass)) {
+                        setProperty = m;
+                        break;
+                    }
+                }
+                if (setProperty == null) setProperty = profile.getClass().getMethod("setProperty", propertyClass);
+                setProperty.invoke(profile, property);
+
+                Method setPlayerProfile = null;
+                for (Method m : skull.getClass().getMethods()) {
+                    if (m.getName().equals("setPlayerProfile") && m.getParameterCount() == 1 && m.getParameterTypes()[0].isAssignableFrom(profile.getClass())) {
+                        setPlayerProfile = m;
+                        break;
+                    }
+                }
+                if (setPlayerProfile != null) {
+                    setPlayerProfile.invoke(skull, profile);
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {
+            // Intentar fallback con GameProfile abajo.
+        }
+
+        try {
+            Class<?> gameProfileClass = Class.forName("com.mojang.authlib.GameProfile");
+            Class<?> propertyClass = Class.forName("com.mojang.authlib.properties.Property");
+            Object profile = gameProfileClass.getConstructor(UUID.class, String.class).newInstance(UUID.randomUUID(), "MDVSocial");
+            Object property = propertyClass.getConstructor(String.class, String.class).newInstance("textures", texture);
+            Object properties = gameProfileClass.getMethod("getProperties").invoke(profile);
+            properties.getClass().getMethod("put", Object.class, Object.class).invoke(properties, "textures", property);
+
+            Field profileField = null;
+            Class<?> clazz = skull.getClass();
+            while (clazz != null && profileField == null) {
+                try {
+                    profileField = clazz.getDeclaredField("profile");
+                } catch (NoSuchFieldException ignored) {
+                    clazz = clazz.getSuperclass();
+                }
+            }
+            if (profileField != null) {
+                profileField.setAccessible(true);
+                profileField.set(skull, profile);
+            }
+        } catch (Throwable ex) {
+            getLogger().warning("No se pudo aplicar textura custom de cabeza: " + ex.getClass().getSimpleName());
+        }
     }
 
     private String applyPlayerPlaceholders(String input, Player player) {
@@ -897,6 +1000,19 @@ items:
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
 
+        if (sec != null && mat == Material.PLAYER_HEAD && meta instanceof SkullMeta skull) {
+            String texture = readTexture(sec);
+            if (texture != null && !texture.isBlank()) {
+                applySkullTexture(skull, texture);
+            } else {
+                String ownerName = sec.getString("head-owner", "");
+                if (ownerName != null && !ownerName.isBlank() && !ownerName.contains("{player}")) {
+                    skull.setOwningPlayer(Bukkit.getOfflinePlayer(ownerName));
+                }
+            }
+            meta = skull;
+        }
+
         if (sec != null) {
             String name = sec.getString("name", sec.getString("display", ""));
             if (name != null && !name.isEmpty()) meta.setDisplayName(color(name));
@@ -914,10 +1030,14 @@ items:
         if (mat == null) mat = Material.NAME_TAG;
         ItemStack item = new ItemStack(mat);
 
-        if (mat == Material.PLAYER_HEAD && title.headOwner != null && !title.headOwner.isBlank()) {
+        if (mat == Material.PLAYER_HEAD) {
             SkullMeta skull = (SkullMeta) item.getItemMeta();
-            OfflinePlayer owner = Bukkit.getOfflinePlayer(title.headOwner.replace("{player}", player.getName()));
-            skull.setOwningPlayer(owner);
+            if (title.texture != null && !title.texture.isBlank()) {
+                applySkullTexture(skull, applyPlayerPlaceholders(title.texture, player));
+            } else if (title.headOwner != null && !title.headOwner.isBlank()) {
+                OfflinePlayer owner = Bukkit.getOfflinePlayer(applyPlayerPlaceholders(title.headOwner, player));
+                skull.setOwningPlayer(owner);
+            }
             item.setItemMeta(skull);
         }
 
@@ -1370,12 +1490,13 @@ items:
         final String name;
         final List<String> lore;
         final String headOwner;
+        final String texture;
         final String action;
         final String targetMenu;
         final List<String> commands;
         final boolean closeOnClick;
 
-        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String action, String targetMenu, List<String> commands, boolean closeOnClick) {
+        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick) {
             this.id = id;
             this.slot = slot;
             this.material = material == null ? "PAPER" : material;
@@ -1383,6 +1504,7 @@ items:
             this.name = name == null ? "" : name;
             this.lore = lore == null ? Collections.emptyList() : lore;
             this.headOwner = headOwner == null ? "" : headOwner;
+            this.texture = texture == null ? "" : texture;
             this.action = action == null ? "" : action;
             this.targetMenu = targetMenu == null ? "" : targetMenu;
             this.commands = commands == null ? Collections.emptyList() : commands;
@@ -1396,6 +1518,7 @@ items:
         public final String prefix;
         public final String material;
         public final String headOwner;
+        public final String texture;
         public final boolean purchasable;
         public final double price;
         public final String unlockPermission;
@@ -1403,12 +1526,13 @@ items:
         public final boolean playerEquippable;
         public final List<String> lore;
 
-        TitleDef(String id, String display, String prefix, String material, String headOwner, boolean purchasable, double price, String unlockPermission, boolean hidden, boolean playerEquippable, List<String> lore) {
+        TitleDef(String id, String display, String prefix, String material, String headOwner, String texture, boolean purchasable, double price, String unlockPermission, boolean hidden, boolean playerEquippable, List<String> lore) {
             this.id = id;
             this.display = display;
             this.prefix = prefix;
             this.material = material;
             this.headOwner = headOwner;
+            this.texture = texture == null ? "" : texture;
             this.purchasable = purchasable;
             this.price = price;
             this.unlockPermission = unlockPermission;
