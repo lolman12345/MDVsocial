@@ -1,4 +1,4 @@
-# MDVSocial 1.1.0
+# MDVSocial 1.1.1
 
 Plugin social inicial para MDVCRAFT.
 
@@ -190,3 +190,19 @@ Para LPC/chat puedes usar algo como:
 El proyecto trae `.github/workflows/maven.yml`.
 
 Sube el proyecto a GitHub y compila desde Actions.
+
+## 1.1.1 - PlaceholderAPI en menus
+Los menus modulares ahora parsean PlaceholderAPI en `name`, `lore` y comandos `COMMAND_PLAYER`.
+
+Atajos disponibles en menus:
+- `{player}`
+- `{level}` -> `%mmocore_level%`
+- `{exp}` / `{experience}` -> `%mmocore_experience%`
+- `{next_level}` -> `%mmocore_next_level%`
+- `{percent}` -> `%mmocore_level_percent%`
+- `{progress}` -> barra visual de progreso
+- `{class}` -> `%mmocore_class%`
+- `{class_id}` -> `%mmocore_class_id%`
+- `{attribute_points}` -> `%mmocore_attribute_points%`
+
+Tambien puedes usar placeholders PAPI directamente, por ejemplo `%mmocore_level%`.

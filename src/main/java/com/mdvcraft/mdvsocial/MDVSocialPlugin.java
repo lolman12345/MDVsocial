@@ -1,5 +1,6 @@
 package com.mdvcraft.mdvsocial;
 
+import me.clip.placeholderapi.PlaceholderAPI;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
@@ -89,7 +90,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             getLogger().info("PlaceholderAPI detectado. Placeholders registrados.");
         }
 
-        getLogger().info("MDVSocial 1.1.0 habilitado.");
+        getLogger().info("MDVSocial 1.1.1 habilitado.");
     }
 
     @Override
@@ -671,7 +672,68 @@ items:
 
     private String applyPlayerPlaceholders(String input, Player player) {
         if (input == null) return "";
-        return input.replace("{player}", player.getName());
+        String out = input.replace("{player}", player.getName());
+
+        // Atajos internos para menus de MDVSocial.
+        // Estos usan PlaceholderAPI si esta disponible, por ejemplo MMOCore.
+        if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            String level = papi(player, "%mmocore_level%");
+            String exp = papi(player, "%mmocore_experience%");
+            String next = papi(player, "%mmocore_next_level%");
+            String percent = stripPercent(papi(player, "%mmocore_level_percent%"));
+            String clazz = papi(player, "%mmocore_class%");
+            String classId = papi(player, "%mmocore_class_id%");
+            String attributePoints = papi(player, "%mmocore_attribute_points%");
+
+            out = out
+                    .replace("{level}", level)
+                    .replace("{exp}", exp)
+                    .replace("{experience}", exp)
+                    .replace("{next_level}", next)
+                    .replace("{percent}", percent)
+                    .replace("{progress}", progressBar(percent))
+                    .replace("{class}", clazz)
+                    .replace("{class_id}", classId)
+                    .replace("{attribute_points}", attributePoints);
+
+            // Permite usar cualquier placeholder normal, por ejemplo:
+            // %mmocore_level%, %vault_eco_balance%, %player_name%, etc.
+            out = PlaceholderAPI.setPlaceholders(player, out);
+        }
+        return out;
+    }
+
+    private String papi(Player player, String placeholder) {
+        try {
+            String value = PlaceholderAPI.setPlaceholders(player, placeholder);
+            if (value == null || value.equalsIgnoreCase(placeholder)) return "";
+            return value;
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private String stripPercent(String value) {
+        if (value == null) return "0";
+        return value.replace("%", "").trim();
+    }
+
+    private String progressBar(String percentText) {
+        double percent;
+        try {
+            percent = Double.parseDouble(stripPercent(percentText).replace(",", "."));
+        } catch (Exception ignored) {
+            percent = 0;
+        }
+        percent = Math.max(0, Math.min(100, percent));
+        int total = 10;
+        int filled = (int) Math.round((percent / 100.0) * total);
+        StringBuilder bar = new StringBuilder();
+        bar.append("&e");
+        for (int i = 0; i < filled; i++) bar.append("|");
+        bar.append("&7");
+        for (int i = filled; i < total; i++) bar.append("|");
+        return bar.toString();
     }
 
     private void sendTitleHelp(CommandSender sender) {
