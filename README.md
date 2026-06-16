@@ -206,3 +206,33 @@ Atajos disponibles en menus:
 - `{attribute_points}` -> `%mmocore_attribute_points%`
 
 Tambien puedes usar placeholders PAPI directamente, por ejemplo `%mmocore_level%`.
+
+## 1.1.2 - Titulo obligatorio / Forastero invisible
+
+Esta version agrega soporte para titulo obligatorio:
+
+```yaml
+settings:
+  mandatory-title: true
+  allow-clear-title: false
+  default-title: forastero
+  default-unlocked-titles:
+    - forastero
+    - aventurero
+  hide-default-title-in-menus: true
+  hidden-titles:
+    - forastero
+```
+
+- `forastero` es el titulo base invisible. Tiene prefix vacio y no aparece en menus.
+- `aventurero` queda desbloqueado para todos y puede equiparse despues.
+- Si el jugador no tiene titulo activo, el placeholder usa `forastero` como fallback.
+- Si `allow-clear-title` es false, el jugador no puede quedarse sin titulo con `/titulo quitar`.
+
+Para equipar Aventurero al elegir raza desde MMOCore:
+
+```yaml
+triggers:
+  class-chosen:
+  - 'command{format="mdvsocial title set %player_name% aventurero"}'
+```
