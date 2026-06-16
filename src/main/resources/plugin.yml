@@ -1,0 +1,25 @@
+name: MDVSocial
+version: 1.1.0
+main: com.mdvcraft.mdvsocial.MDVSocialPlugin
+api-version: '1.21'
+author: MDVCRAFT
+softdepend: [PlaceholderAPI, Vault, LuckPerms, MMOCore, Essentials]
+commands:
+  social:
+    description: Abre el menu social de MDVCRAFT.
+    usage: /social
+    aliases: [mdvsocialmenu, sociedad]
+  titulos:
+    description: Abre el menu de titulos.
+    usage: /titulos
+    aliases: [titulo, titles, title]
+  mdvsocial:
+    description: Comando administrativo de MDVSocial.
+    usage: /mdvsocial
+permissions:
+  mdvsocial.use:
+    description: Permite usar /social y /titulos.
+    default: true
+  mdvsocial.admin:
+    description: Permite administrar MDVSocial.
+    default: op

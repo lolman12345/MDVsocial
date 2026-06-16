@@ -1,0 +1,42 @@
+# ==========================================================
+# MDVSocial - Menu modular principal
+# Acciones disponibles:
+# OPEN_MENU / COMMAND_PLAYER / BACK / CLOSE / PREVIOUS_PAGE / NEXT_PAGE / OPEN_TITLES
+# ==========================================================
+title: '&8MDVSocial'
+size: 27
+items:
+  titulos:
+    slot: 11
+    material: NAME_TAG
+    name: '&eTitulos y rangos'
+    lore:
+      - '&7Compra, equipa o revisa titulos.'
+      - '&eClick para abrir.'
+    action: OPEN_TITLES
+
+  clan:
+    slot: 13
+    material: SHIELD
+    name: '&aClan'
+    lore:
+      - '&7Abre el menu de clan.'
+      - '&eClick para abrir.'
+    action: OPEN_MENU
+    target-menu: clan
+
+  ayuda:
+    slot: 15
+    material: BOOK
+    name: '&bAyuda social'
+    lore:
+      - '&7Comandos sociales utiles.'
+      - '&eClick para abrir.'
+    action: OPEN_MENU
+    target-menu: ayuda
+
+  cerrar:
+    slot: 26
+    material: BARRIER
+    name: '&cCerrar'
+    action: CLOSE

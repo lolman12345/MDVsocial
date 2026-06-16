@@ -1,0 +1,300 @@
+# ==========================================================
+# MDVSocial 1.1.0
+# Menu social + sistema de titulos cosmeticos para MDVCRAFT
+# ==========================================================
+
+messages:
+  prefix: '&6&l[&5&lMDVSocial&6&l]&4> &r'
+  no-permission: '&cNo tienes permiso.'
+  only-players: '&cEste comando solo puede usarlo un jugador.'
+  reloaded: '&aMDVSocial recargado.'
+  title-equipped: '&eAhora usas el titulo {title}&e.'
+  title-cleared: '&eYa no usas ningun titulo.'
+  title-bought: '&aCompraste el titulo {title}&a.'
+  not-enough-money: '&cNo tienes monedas suficientes. Precio: &e{price}&c.'
+  already-owned: '&cYa tienes este titulo.'
+  title-locked: '&cNo tienes este titulo desbloqueado.'
+  title-not-found: '&cEse titulo no existe.'
+  player-not-found: '&cJugador no encontrado.'
+  given-title: '&aTitulo entregado correctamente.'
+  removed-title: '&eTitulo removido correctamente.'
+  boss-radius-given: '&aTitulo entregado a &e{amount} &ajugadores cercanos.'
+
+settings:
+  # Menu inicial que abre /social.
+  # Se busca en plugins/MDVSocial/Menus/<nombre>.yml
+  start-menu: main
+
+  # Si esto esta true, la tienda de titulos usara Vault/Economy.
+  use-vault-economy: true
+
+  # PlaceholderAPI:
+  # %mdvsocial_title% = nombre visible sin colores raros finales
+  # %mdvsocial_title_prefix% = prefijo completo, ejemplo &8[Vagabundo]&r
+  # %mdvsocial_active_title% = id interno del titulo activo
+  # %mdvsocial_unlocked_titles% = cantidad de titulos desbloqueados por data
+
+  # Comandos opcionales al equipar/quitar titulo.
+  # Se ejecutan desde consola. Puedes dejarlos vacios.
+  # Placeholders: {player}, {title_id}, {title_display}, {title_prefix}
+  commands-on-title-equip: []
+  commands-on-title-clear: []
+
+  # Si un jugador tiene un titulo activo pero ya no cumple permiso/requisito,
+  # el placeholder no lo mostrara.
+  hide-invalid-active-title: true
+
+menus:
+  main:
+    title: '&8MDVSocial'
+    size: 27
+  titles:
+    title: '&8Titulos y rangos'
+    size: 27
+  my-titles:
+    title: '&8Mis titulos'
+    size: 54
+  title-shop:
+    title: '&8Tienda de titulos'
+    size: 54
+  locked-titles:
+    title: '&8Titulos bloqueados'
+    size: 54
+  ranks:
+    title: '&8Rangos'
+    size: 54
+
+items:
+  filler:
+    material: BLACK_STAINED_GLASS_PANE
+    name: ' '
+  back:
+    material: ARROW
+    name: '&eVolver'
+    lore:
+      - '&7Regresa al menu anterior.'
+  close:
+    material: BARRIER
+    name: '&cCerrar'
+  next-page:
+    material: SPECTRAL_ARROW
+    name: '&ePagina siguiente'
+  previous-page:
+    material: ARROW
+    name: '&ePagina anterior'
+  clear-title:
+    material: MILK_BUCKET
+    name: '&fQuitar titulo'
+    lore:
+      - '&7Deja de mostrar tu titulo actual.'
+      - '&eClick para quitarlo.'
+
+main-menu:
+  titles:
+    slot: 11
+    material: NAME_TAG
+    name: '&eTitulos y rangos'
+    lore:
+      - '&7Compra, equipa o revisa titulos.'
+      - '&eClick para abrir.'
+  clan:
+    slot: 13
+    material: SHIELD
+    name: '&aClan'
+    lore:
+      - '&7Modulo reservado para Clanes v2.'
+      - '&8Por ahora ejecuta /clan.'
+    commands:
+      - 'clan'
+  social:
+    slot: 15
+    material: PLAYER_HEAD
+    name: '&bAmigos y correo'
+    lore:
+      - '&7Modulo reservado para MDVSocial futuro.'
+      - '&7Por ahora usa /friends y /mail.'
+    commands:
+      - 'friends'
+
+titles-menu:
+  my-titles:
+    slot: 10
+    material: CHEST
+    name: '&aMis titulos'
+    lore:
+      - '&7Mira los titulos que tienes.'
+      - '&eClick para abrir.'
+  shop:
+    slot: 12
+    material: EMERALD
+    name: '&eTienda de titulos'
+    lore:
+      - '&7Compra titulos con monedas.'
+      - '&eClick para abrir.'
+  locked:
+    slot: 14
+    material: IRON_BARS
+    name: '&cTitulos bloqueados'
+    lore:
+      - '&7Mira titulos que aun no tienes.'
+      - '&eClick para abrir.'
+  ranks:
+    slot: 16
+    material: GOLDEN_HELMET
+    name: '&6Rangos'
+    lore:
+      - '&7Mira rangos y beneficios esteticos.'
+      - '&eClick para abrir.'
+  clear:
+    slot: 22
+
+# Slots usados para listas paginadas.
+list-slots:
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 19
+  - 20
+  - 21
+  - 22
+  - 23
+  - 24
+  - 25
+  - 28
+  - 29
+  - 30
+  - 31
+  - 32
+  - 33
+  - 34
+  - 37
+  - 38
+  - 39
+  - 40
+  - 41
+  - 42
+  - 43
+
+# ==========================================================
+# Titulos
+# id:
+#   display: nombre visible
+#   prefix: prefijo para PlaceholderAPI
+#   material: item del menu
+#   custom-head-texture: ''  # opcional, base64 texture de cabeza
+#   purchasable: true/false
+#   price: 500
+#   unlock-permission: 'mdvsocial.title.noble' # opcional, para VIP/rangos
+#   lore: ...
+# ==========================================================
+
+titles:
+  vagabundo:
+    display: '&7Vagabundo'
+    prefix: '&8[Vagabundo]&r '
+    material: LEATHER_BOOTS
+    purchasable: true
+    price: 250
+    lore:
+      - '&7Para los que caminan sin bandera.'
+      - '&ePrecio: &6250 monedas'
+
+  comerciante:
+    display: '&6Comerciante'
+    prefix: '&6[Comerciante]&r '
+    material: EMERALD
+    purchasable: true
+    price: 1500
+    lore:
+      - '&7Compra barato, vende caro.'
+      - '&ePrecio: &61500 monedas'
+
+  granjero:
+    display: '&aGranjero'
+    prefix: '&a[Granjero]&r '
+    material: WHEAT
+    purchasable: true
+    price: 600
+    lore:
+      - '&7El campo tambien alimenta aventuras.'
+      - '&ePrecio: &6600 monedas'
+
+  cazador:
+    display: '&2Cazador'
+    prefix: '&2[Cazador]&r '
+    material: BOW
+    purchasable: true
+    price: 1000
+    lore:
+      - '&7Rastreador de bestias y caminos.'
+      - '&ePrecio: &61000 monedas'
+
+  cazador_maestro:
+    display: '&2Cazador Maestro'
+    prefix: '&2[Cazador Maestro]&r '
+    material: CROSSBOW
+    purchasable: false
+    lore:
+      - '&7Se obtiene por progreso de Cazador.'
+      - '&8Ejemplo: MMOCore ejecuta:'
+      - '&8/mdvsocial title give <jugador> cazador_maestro'
+
+  noble:
+    display: '&6Noble'
+    prefix: '&6[Noble]&r '
+    material: GOLD_INGOT
+    purchasable: false
+    unlock-permission: 'mdvsocial.title.noble'
+    lore:
+      - '&7Titulo estetico de rango premium.'
+      - '&7Requiere permiso: &emdvsocial.title.noble'
+
+  caballero:
+    display: '&eCaballero'
+    prefix: '&e[Caballero]&r '
+    material: IRON_SWORD
+    purchasable: false
+    unlock-permission: 'mdvsocial.title.caballero'
+    lore:
+      - '&7Titulo estetico de rango premium.'
+      - '&7Requiere permiso: &emdvsocial.title.caballero'
+
+  azote_insepultos:
+    display: '&5Azote de Insepultos'
+    prefix: '&5[Azote de Insepultos]&r '
+    material: WITHER_SKELETON_SKULL
+    purchasable: false
+    lore:
+      - '&7Recompensa por derrotar horrores de la noche.'
+      - '&8Para boss/evento:'
+      - '&8/mdvsocial title give-near world x y z 32 azote_insepultos'
+
+ranks:
+  aventurero:
+    display: '&aAventurero'
+    material: IRON_SWORD
+    permission: 'group.aventurero'
+    lore:
+      - '&7Rango base tras elegir raza.'
+      - '&7Estado: {status}'
+
+  vip:
+    display: '&bVIP'
+    material: DIAMOND
+    permission: 'group.vip'
+    lore:
+      - '&7Rango premium estetico.'
+      - '&7Puede desbloquear titulos especiales.'
+      - '&7Estado: {status}'
+
+  noble:
+    display: '&6Noble'
+    material: GOLDEN_HELMET
+    permission: 'group.noble'
+    lore:
+      - '&7Rango premium/rol.'
+      - '&7Estado: {status}'

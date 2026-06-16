@@ -1,0 +1,35 @@
+title: '&8Clan'
+size: 27
+items:
+  info:
+    slot: 11
+    material: PAPER
+    name: '&eInformacion del clan'
+    lore:
+      - '&7Ejecuta /clan info como jugador.'
+    action: COMMAND_PLAYER
+    commands:
+      - 'clan info'
+
+  crear:
+    slot: 13
+    material: EMERALD
+    name: '&aCrear clan'
+    lore:
+      - '&7Ejecuta /clan create como jugador.'
+      - '&8Despues puedes cambiarlo por otro submenu.'
+    action: COMMAND_PLAYER
+    commands:
+      - 'clan create'
+
+  volver:
+    slot: 18
+    material: ARROW
+    name: '&eVolver'
+    action: BACK
+
+  cerrar:
+    slot: 26
+    material: BARRIER
+    name: '&cCerrar'
+    action: CLOSE
