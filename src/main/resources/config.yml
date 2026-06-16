@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.1.1
+# MDVSocial 1.1.2
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -10,6 +10,8 @@ messages:
   reloaded: '&aMDVSocial recargado.'
   title-equipped: '&eAhora usas el titulo {title}&e.'
   title-cleared: '&eYa no usas ningun titulo.'
+  title-clear-disabled: '&cNo puedes quitar tu titulo actual. Debes tener siempre un titulo equipado.'
+  title-reset-default: '&eTitulo restablecido al titulo inicial.'
   title-bought: '&aCompraste el titulo {title}&a.'
   not-enough-money: '&cNo tienes monedas suficientes. Precio: &e{price}&c.'
   already-owned: '&cYa tienes este titulo.'
@@ -19,6 +21,7 @@ messages:
   given-title: '&aTitulo entregado correctamente.'
   removed-title: '&eTitulo removido correctamente.'
   boss-radius-given: '&aTitulo entregado a &e{amount} &ajugadores cercanos.'
+  title-not-player-equippable: '&cNo puedes equiparte ese titulo.'
 
 settings:
   # Menu inicial que abre /social.
@@ -27,6 +30,31 @@ settings:
 
   # Si esto esta true, la tienda de titulos usara Vault/Economy.
   use-vault-economy: true
+
+  # Sistema de titulo obligatorio.
+  # Si mandatory-title esta true, el jugador siempre tendra un titulo activo.
+  # Si no tiene ninguno guardado, se usara default-title.
+  mandatory-title: true
+
+  # Si esta false, /titulo quitar y el boton de quitar no eliminan el titulo actual.
+  allow-clear-title: false
+
+  # Titulo base para jugadores nuevos o Forasteros.
+  # Se muestra como prefijo mientras no tengan otro titulo activo.
+  # No hace falta desbloquearlo ni guardarlo en player-data.yml.
+  default-title: forastero
+
+  # Titulos desbloqueados para todos los jugadores sin necesidad de guardarlos en player-data.yml.
+  default-unlocked-titles:
+    - aventurero
+
+  # El titulo por defecto no aparece en menus/listas.
+  # Esto evita que el jugador pueda volver a equiparse Forastero desde el menu.
+  hide-default-title-in-menus: true
+
+  # Otros titulos ocultos de menus.
+  hidden-titles:
+    - forastero
 
   # PlaceholderAPI:
   # %mdvsocial_title% = nombre visible sin colores raros finales
@@ -86,8 +114,9 @@ items:
     material: MILK_BUCKET
     name: '&fQuitar titulo'
     lore:
-      - '&7Deja de mostrar tu titulo actual.'
-      - '&eClick para quitarlo.'
+      - '&7En MDVCRAFT siempre debes tener'
+      - '&7un titulo activo.'
+      - '&8Si esta desactivado, no hara nada.'
 
 main-menu:
   titles:
@@ -193,6 +222,26 @@ list-slots:
 # ==========================================================
 
 titles:
+  forastero:
+    display: '&7Forastero'
+    prefix: '&7[Forastero]&r '
+    material: GRAY_DYE
+    purchasable: false
+    hidden: true
+    player-equippable: false
+    lore:
+      - '&7Titulo base para jugadores sin raza.'
+      - '&8No aparece en menus y no puede reequiparse.'
+
+  aventurero:
+    display: '&aAventurero'
+    prefix: '&a[Aventurero]&r '
+    material: IRON_SWORD
+    purchasable: false
+    lore:
+      - '&7Titulo base tras elegir raza.'
+      - '&7Se equipa automaticamente al comenzar.'
+
   vagabundo:
     display: '&7Vagabundo'
     prefix: '&8[Vagabundo]&r '

@@ -236,3 +236,11 @@ triggers:
   class-chosen:
   - 'command{format="mdvsocial title set %player_name% aventurero"}'
 ```
+
+
+## Cambio 1.1.3
+
+- `forastero` puede funcionar como título por defecto visible en chat.
+- `forastero` queda oculto de menús y no es equipable por jugadores si usa `player-equippable: false`.
+- `aventurero` puede quedar como título desbloqueado para todos y equipable después de elegir raza.
+- Jugadores nuevos sin título activo usan `settings.default-title: forastero` sin necesidad de guardarlo en `player-data.yml`.

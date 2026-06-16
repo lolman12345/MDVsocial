@@ -90,7 +90,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             getLogger().info("PlaceholderAPI detectado. Placeholders registrados.");
         }
 
-        getLogger().info("MDVSocial 1.1.1 habilitado.");
+        getLogger().info("MDVSocial 1.1.2 habilitado.");
     }
 
     @Override
@@ -149,6 +149,8 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                     t.getBoolean("purchasable", false),
                     t.getDouble("price", 0),
                     t.getString("unlock-permission", ""),
+                    t.getBoolean("hidden", false),
+                    t.getBoolean("player-equippable", !t.getBoolean("hidden", false)),
                     t.getStringList("lore")
             );
             titles.put(cleanId, def);
@@ -311,9 +313,9 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 
         if (action.equals("clear") && args.length >= 3) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
-            setActiveTitle(target.getUniqueId(), "");
+            setActiveTitle(target.getUniqueId(), getClearTargetTitleId());
             if (target.isOnline()) runClearCommands(target.getPlayer());
-            msg(sender, "removed-title");
+            msg(sender, isMandatoryTitle() ? "title-reset-default" : "removed-title");
             return true;
         }
 
@@ -968,6 +970,7 @@ items:
     private List<TitleDef> filteredTitles(Player player, String type) {
         List<TitleDef> out = new ArrayList<>();
         for (TitleDef title : titles.values()) {
+            if (isHiddenTitle(title.id)) continue;
             boolean owned = hasTitle(player, title.id);
             if (type.equals("MY_TITLES") && owned) out.add(title);
             else if (type.equals("SHOP") && title.purchasable && !owned) out.add(title);
@@ -1106,6 +1109,10 @@ items:
             msg(player, "title-not-found");
             return;
         }
+        if (!title.playerEquippable) {
+            msg(player, "title-not-player-equippable");
+            return;
+        }
         if (!hasTitle(player, titleId)) {
             msg(player, "title-locked");
             return;
@@ -1117,6 +1124,10 @@ items:
     }
 
     private void clearActiveTitle(Player player) {
+        if (!allowClearTitle()) {
+            msg(player, "title-clear-disabled");
+            return;
+        }
         setActiveTitle(player.getUniqueId(), "");
         saveData();
         runClearCommands(player);
@@ -1150,6 +1161,8 @@ items:
         if (player.hasPermission("mdvsocial.admin")) return true;
         TitleDef title = titles.get(titleId);
         if (title == null) return false;
+        if (titleId.equals(getDefaultTitleId())) return true;
+        if (getDefaultUnlockedTitles().contains(titleId)) return true;
         if (getUnlockedTitles(player.getUniqueId()).contains(titleId)) return true;
         return title.unlockPermission != null && !title.unlockPermission.isBlank() && player.hasPermission(title.unlockPermission);
     }
@@ -1168,7 +1181,7 @@ items:
         Set<String> set = getUnlockedTitles(uuid);
         set.remove(titleId);
         data.set(path(uuid, "unlocked"), new ArrayList<>(set));
-        if (getActiveTitleId(uuid).equals(titleId)) data.set(path(uuid, "active"), "");
+        if (getActiveTitleId(uuid).equals(titleId)) data.set(path(uuid, "active"), getClearTargetTitleId());
         saveData();
     }
 
@@ -1178,7 +1191,12 @@ items:
     }
 
     public String getActiveTitleId(UUID uuid) {
-        return normalize(data.getString(path(uuid, "active"), ""));
+        String active = normalize(data.getString(path(uuid, "active"), ""));
+        if (active.isBlank() && isMandatoryTitle()) {
+            String def = getDefaultTitleId();
+            if (!def.isBlank() && titles.containsKey(def)) return def;
+        }
+        return active;
     }
 
     private void setActiveTitle(UUID uuid, String titleId) {
@@ -1195,7 +1213,47 @@ items:
     }
 
     public int countUnlocked(UUID uuid) {
-        return getUnlockedTitles(uuid).size();
+        Set<String> all = new HashSet<>(getDefaultUnlockedTitles());
+        all.addAll(getUnlockedTitles(uuid));
+        all.removeIf(this::isHiddenTitle);
+        return all.size();
+    }
+
+    private boolean isMandatoryTitle() {
+        return getConfig().getBoolean("settings.mandatory-title", false);
+    }
+
+    private boolean allowClearTitle() {
+        return getConfig().getBoolean("settings.allow-clear-title", !isMandatoryTitle());
+    }
+
+    private String getDefaultTitleId() {
+        return normalize(getConfig().getString("settings.default-title", ""));
+    }
+
+    private String getClearTargetTitleId() {
+        if (!isMandatoryTitle()) return "";
+        String def = getDefaultTitleId();
+        return titles.containsKey(def) ? def : "";
+    }
+
+    private Set<String> getDefaultUnlockedTitles() {
+        return getConfig().getStringList("settings.default-unlocked-titles")
+                .stream()
+                .map(this::normalize)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    private boolean isHiddenTitle(String titleId) {
+        titleId = normalize(titleId);
+        TitleDef def = titles.get(titleId);
+        if (def != null && def.hidden) return true;
+        if (getConfig().getBoolean("settings.hide-default-title-in-menus", true) && titleId.equals(getDefaultTitleId())) return true;
+        for (String hidden : getConfig().getStringList("settings.hidden-titles")) {
+            if (titleId.equals(normalize(hidden))) return true;
+        }
+        return false;
     }
 
     private String path(UUID uuid, String child) {
@@ -1341,9 +1399,11 @@ items:
         public final boolean purchasable;
         public final double price;
         public final String unlockPermission;
+        public final boolean hidden;
+        public final boolean playerEquippable;
         public final List<String> lore;
 
-        TitleDef(String id, String display, String prefix, String material, String headOwner, boolean purchasable, double price, String unlockPermission, List<String> lore) {
+        TitleDef(String id, String display, String prefix, String material, String headOwner, boolean purchasable, double price, String unlockPermission, boolean hidden, boolean playerEquippable, List<String> lore) {
             this.id = id;
             this.display = display;
             this.prefix = prefix;
@@ -1352,6 +1412,8 @@ items:
             this.purchasable = purchasable;
             this.price = price;
             this.unlockPermission = unlockPermission;
+            this.hidden = hidden;
+            this.playerEquippable = playerEquippable;
             this.lore = lore == null ? Collections.emptyList() : lore;
         }
     }
