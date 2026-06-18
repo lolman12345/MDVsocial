@@ -122,7 +122,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         long cleanupMinutes = Math.max(5L, getConfig().getLong("mail.cleanup-interval-minutes", 30L));
         Bukkit.getScheduler().runTaskTimer(this, this::cleanupExpiredMail, 20L * 60L, cleanupMinutes * 60L * 20L);
 
-        getLogger().info("MDVSocial 1.2.3 habilitado.");
+        getLogger().info("MDVSocial 1.2.4 habilitado.");
     }
 
     @Override
@@ -766,16 +766,17 @@ items:
     slot: 10
     material: PLAYER_HEAD
     head-owner: '{target}'
-    name: '&e&lPerfil de {target}'
+    name: '&e&l{target}'
     lore:
       - ''
       - '&7Estado: {target_status}'
-      - '&7Abre el perfil de este compañero.'
+      - '&7UUID: &8{target_uuid}'
       - ''
-      - '&eClick para abrir.'
-    action: COMMAND_PLAYER
-    commands:
-      - 'profile {target}'
+      - '&7Compañero registrado'
+      - '&7en tu libreta social.'
+      - ''
+      - '&8Usa las opciones cercanas'
+      - '&8para interactuar.'
 
   carta:
     slot: 12
@@ -2509,6 +2510,163 @@ items:
         return create.invoke(partyModule, playerData);
     }
 
+    private Object getMMOCorePlayerData(Player player) throws Exception {
+        Class<?> playerDataClass = Class.forName("net.Indyuce.mmocore.api.player.PlayerData");
+        Method getData = playerDataClass.getMethod("get", OfflinePlayer.class);
+        return getData.invoke(null, player);
+    }
+
+    private Object getMMOCoreParty(Player player) {
+        if (player == null || !Bukkit.getPluginManager().isPluginEnabled("MMOCore")) return null;
+        try {
+            Object playerData = getMMOCorePlayerData(player);
+            if (playerData == null) return null;
+            Method getParty = playerData.getClass().getMethod("getParty");
+            return getParty.invoke(playerData);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private int getConfiguredPartyMaxMembers() {
+        return Math.max(2, getConfig().getInt("social-friend-options.party.max-members", 5));
+    }
+
+    private int countMMOCorePartyMembers(Object party) {
+        if (party == null) return 0;
+        try {
+            Method countMembers = party.getClass().getMethod("countMembers");
+            Object count = countMembers.invoke(party);
+            if (count instanceof Number n) return Math.max(0, n.intValue());
+        } catch (Throwable ignored) { }
+        return getMMOCorePartyMemberNames(party).size();
+    }
+
+    private List<String> getMMOCorePartyMemberNames(Object party) {
+        if (party == null) return Collections.emptyList();
+        List<?> rawMembers = Collections.emptyList();
+
+        String[] memberMethods = {"getOnlineMembers", "getMembers"};
+        for (String methodName : memberMethods) {
+            try {
+                Method method = party.getClass().getMethod(methodName);
+                Object result = method.invoke(party);
+                if (result instanceof Iterable<?> iterable) {
+                    List<Object> collected = new ArrayList<>();
+                    for (Object value : iterable) collected.add(value);
+                    if (!collected.isEmpty()) {
+                        rawMembers = collected;
+                        break;
+                    }
+                }
+            } catch (Throwable ignored) { }
+        }
+
+        if (rawMembers.isEmpty()) return Collections.emptyList();
+        List<String> names = new ArrayList<>();
+        for (Object member : rawMembers) {
+            String name = getMMOCorePlayerDataName(member);
+            if (name != null && !name.isBlank()) names.add(name);
+        }
+        return names;
+    }
+
+    private String getMMOCorePlayerDataName(Object playerData) {
+        if (playerData == null) return null;
+
+        String[] objectMethods = {"getPlayer", "getOfflinePlayer", "getBukkitPlayer", "getProfile"};
+        for (String methodName : objectMethods) {
+            try {
+                Method method = playerData.getClass().getMethod(methodName);
+                Object value = method.invoke(playerData);
+                String name = extractPlayerLikeName(value);
+                if (name != null && !name.isBlank()) return name;
+            } catch (Throwable ignored) { }
+        }
+
+        String[] stringMethods = {"getName", "getPlayerName", "getUsername"};
+        for (String methodName : stringMethods) {
+            try {
+                Method method = playerData.getClass().getMethod(methodName);
+                Object value = method.invoke(playerData);
+                if (value instanceof String str && !str.isBlank()) return str;
+            } catch (Throwable ignored) { }
+        }
+
+        String[] uuidMethods = {"getUniqueId", "getUniqueID", "getUUID", "getUuid"};
+        for (String methodName : uuidMethods) {
+            try {
+                Method method = playerData.getClass().getMethod(methodName);
+                Object value = method.invoke(playerData);
+                if (value instanceof UUID uuid) {
+                    OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
+                    return offline.getName() == null ? uuid.toString().substring(0, 8) : offline.getName();
+                }
+            } catch (Throwable ignored) { }
+        }
+
+        return null;
+    }
+
+    private String extractPlayerLikeName(Object value) {
+        if (value == null) return null;
+        if (value instanceof Player player) return player.getName();
+        if (value instanceof OfflinePlayer offlinePlayer) return offlinePlayer.getName();
+
+        try {
+            Method getName = value.getClass().getMethod("getName");
+            Object name = getName.invoke(value);
+            if (name instanceof String str && !str.isBlank()) return str;
+        } catch (Throwable ignored) { }
+
+        try {
+            Method getUniqueId = value.getClass().getMethod("getUniqueId");
+            Object uuid = getUniqueId.invoke(value);
+            if (uuid instanceof UUID id) {
+                OfflinePlayer offline = Bukkit.getOfflinePlayer(id);
+                return offline.getName() == null ? id.toString().substring(0, 8) : offline.getName();
+            }
+        } catch (Throwable ignored) { }
+
+        return null;
+    }
+
+    private String partyScoreboardPlaceholder(Player player, String key) {
+        Object party = getMMOCoreParty(player);
+        int max = getConfiguredPartyMaxMembers();
+
+        if (party == null) {
+            return switch (key) {
+                case "party_in_group", "party_in_party" -> "false";
+                case "party_max" -> String.valueOf(max);
+                case "party_count" -> "0";
+                default -> "";
+            };
+        }
+
+        int count = countMMOCorePartyMembers(party);
+        List<String> members = getMMOCorePartyMemberNames(party);
+
+        if (key.equals("party_header")) return color("&dGrupo: &f" + count + "&7/&f" + max);
+        if (key.equals("party_count")) return String.valueOf(count);
+        if (key.equals("party_max")) return String.valueOf(max);
+        if (key.equals("party_in_group") || key.equals("party_in_party")) return "true";
+        if (key.equals("party_spacer")) return " ";
+        if (key.equals("party_members")) return members.isEmpty() ? "" : String.join(", ", members);
+
+        if (key.startsWith("party_member_")) {
+            try {
+                int index = Integer.parseInt(key.substring("party_member_".length())) - 1;
+                if (index < 0 || index >= members.size()) return "";
+                return color("&7• &f" + members.get(index));
+            } catch (NumberFormatException ignored) {
+                return "";
+            }
+        }
+
+        return "";
+    }
+
     private void runConfiguredCommands(Player player, String path) {
         if (path == null || path.isBlank()) return;
         List<String> commands = getConfig().getStringList(path + ".commands");
@@ -3009,7 +3167,8 @@ items:
                 case "title_prefix" -> active == null ? "" : plugin.color(active.prefix);
                 case "active_title" -> active == null ? "" : active.id;
                 case "unlocked_titles" -> String.valueOf(plugin.countUnlocked(player.getUniqueId()));
-                default -> "";
+                case "party_header", "party_count", "party_max", "party_in_group", "party_in_party", "party_spacer", "party_members" -> plugin.partyScoreboardPlaceholder(player, p);
+                default -> p.startsWith("party_member_") ? plugin.partyScoreboardPlaceholder(player, p) : "";
             };
         }
     }

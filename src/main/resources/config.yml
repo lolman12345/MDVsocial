@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.2.3
+# MDVSocial 1.2.4
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -94,9 +94,20 @@ settings:
 
   # PlaceholderAPI:
   # %mdvsocial_title% = nombre visible sin colores raros finales
+  # %mdvsocial_title_colored% = nombre visible con colores
   # %mdvsocial_title_prefix% = prefijo completo, ejemplo &8[Vagabundo]&r
   # %mdvsocial_active_title% = id interno del titulo activo
   # %mdvsocial_unlocked_titles% = cantidad de titulos desbloqueados por data
+  #
+  # Scoreboard party inteligente:
+  # Si el jugador no esta en party, estos placeholders devuelven vacio.
+  # %mdvsocial_party_header% = &dGrupo: actual/max
+  # %mdvsocial_party_member_1% ... %mdvsocial_party_member_5% = miembros del grupo
+  # %mdvsocial_party_count% = cantidad actual
+  # %mdvsocial_party_max% = maximo configurado
+  # %mdvsocial_party_members% = miembros separados por coma
+  # %mdvsocial_party_in_group% = true/false
+  # %mdvsocial_party_spacer% = linea espaciadora solo si estas en party
 
   # Comandos opcionales al equipar/quitar titulo.
   # Se ejecutan desde consola. Puedes dejarlos vacios.
