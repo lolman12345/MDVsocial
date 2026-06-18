@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.2.1
+# MDVSocial 1.2.3
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -48,6 +48,16 @@ messages:
   mail-broadcast-sent: '&aCarta del servidor enviada a &e{sent} &ajugadores. &7Omitidos: &e{skipped}&7.'
   mail-cannot-block-server: '&cNo puedes bloquear cartas oficiales de MDVCRAFT.'
   mail-cannot-reply-server: '&cNo puedes responder cartas oficiales de MDVCRAFT.'
+  social-target-not-found: '&cNo pude detectar ese compañero.'
+  party-mmocore-missing: '&cMMOCore no está disponible para invitar a party.'
+  party-target-offline: '&cNo puedes invitar a &e{target}&c porque no está conectado.'
+  party-self: '&cNo puedes invitarte a tu propia party.'
+  party-must-create: '&cDebes crear un Grupo de Aventura antes de invitar a &e{target}&c. Usa &e/party&c.'
+  party-auto-created: '&aGrupo de Aventura creado automáticamente.'
+  party-invite-sent: '&aInvitación de party enviada a &e{target}&a.'
+  party-target-already-member: '&e{target} &cya está en tu party.'
+  party-full: '&cTu party está llena. Máximo: &e{max}&c jugadores.'
+  party-error: '&cNo se pudo enviar la invitación de party.'
 
 settings:
   # Menu inicial que abre /social.
@@ -329,6 +339,32 @@ mail:
       lore:
         - '&7Bloquea a este jugador para que'
         - '&7no pueda enviarte mas cartas.'
+
+# ==========================================================
+# Opciones de amigos externos MMOCore
+# Permite abrir un menú MDVSocial al hacer click izquierdo
+# sobre un amigo en la lista de /friends.
+# El click derecho queda libre para que MMOCore elimine amigos.
+#
+# target-menu debe existir en plugins/MDVSocial/Menus/<target-menu>.yml
+# Placeholders disponibles en ese menú:
+# {target}, {target_name}, {target_uuid}, {target_status}, {target_online}
+#
+# party.when-no-party:
+# - message: solo avisa que debes crear party primero
+# - create-and-invite: crea party automáticamente y luego invita
+# ==========================================================
+social-friend-options:
+  enabled: true
+  title: 'Libreta de Compañeros'
+  title-contains: ''
+  click: LEFT
+  cancel-event: true
+  target-menu: amigo_opciones
+  slots: [10,11,12,13,14,15,16,19,20,21,22,23,24,25,28,29,30,31,32,33,34]
+  party:
+    when-no-party: message
+    max-members: 5
 
 # ==========================================================
 # Puentes para GUIs externas

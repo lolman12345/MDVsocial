@@ -81,6 +81,9 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private org.bukkit.NamespacedKey keyCloseOnClick;
     private org.bukkit.NamespacedKey keyMailId;
     private org.bukkit.NamespacedKey keyMailSender;
+    private org.bukkit.NamespacedKey keyFriendTargetUuid;
+    private org.bukkit.NamespacedKey keyFriendTargetName;
+    private org.bukkit.NamespacedKey keyFriendTargetOnline;
 
     @Override
     public void onEnable() {
@@ -92,6 +95,9 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         keyCloseOnClick = new org.bukkit.NamespacedKey(this, "close_on_click");
         keyMailId = new org.bukkit.NamespacedKey(this, "mail_id");
         keyMailSender = new org.bukkit.NamespacedKey(this, "mail_sender");
+        keyFriendTargetUuid = new org.bukkit.NamespacedKey(this, "friend_target_uuid");
+        keyFriendTargetName = new org.bukkit.NamespacedKey(this, "friend_target_name");
+        keyFriendTargetOnline = new org.bukkit.NamespacedKey(this, "friend_target_online");
 
         saveDefaultConfig();
         loadAll();
@@ -116,7 +122,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         long cleanupMinutes = Math.max(5L, getConfig().getLong("mail.cleanup-interval-minutes", 30L));
         Bukkit.getScheduler().runTaskTimer(this, this::cleanupExpiredMail, 20L * 60L, cleanupMinutes * 60L * 20L);
 
-        getLogger().info("MDVSocial 1.2.2 habilitado.");
+        getLogger().info("MDVSocial 1.2.3 habilitado.");
     }
 
     @Override
@@ -536,6 +542,14 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                 getLogger().warning("No se pudo crear Menus/correo.yml: " + e.getMessage());
             }
         }
+        File amigoOpciones = new File(folder, "amigo_opciones.yml");
+        if (!amigoOpciones.exists()) {
+            try {
+                Files.writeString(amigoOpciones.toPath(), defaultAmigoOpcionesMenuYaml(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                getLogger().warning("No se pudo crear Menus/amigo_opciones.yml: " + e.getMessage());
+            }
+        }
     }
 
     private String defaultMainMenuYaml() {
@@ -742,6 +756,96 @@ items:
 """;
     }
 
+
+    private String defaultAmigoOpcionesMenuYaml() {
+        return """
+title: '&8&lOpciones de {target}'
+size: 27
+items:
+  perfil:
+    slot: 10
+    material: PLAYER_HEAD
+    head-owner: '{target}'
+    name: '&e&lPerfil de {target}'
+    lore:
+      - ''
+      - '&7Estado: {target_status}'
+      - '&7Abre el perfil de este compañero.'
+      - ''
+      - '&eClick para abrir.'
+    action: COMMAND_PLAYER
+    commands:
+      - 'profile {target}'
+
+  carta:
+    slot: 12
+    material: WRITABLE_BOOK
+    name: '&6&lEnviar carta'
+    lore:
+      - ''
+      - '&7Escribe una carta para &e{target}&7.'
+      - '&7No tendrás que volver a escribir su nombre.'
+      - ''
+      - '&eClick para escribir el mensaje.'
+    action: START_MAIL_SEND_TARGET
+    close-on-click: true
+
+  party:
+    slot: 14
+    material: TOTEM_OF_UNDYING
+    name: '&d&lInvitar al grupo'
+    lore:
+      - ''
+      - '&7Invita a &e{target} &7a tu'
+      - '&7Grupo de Aventura.'
+      - ''
+      - '&8Si no tienes party, el comportamiento'
+      - '&8se controla desde config.yml.'
+      - ''
+      - '&eClick para invitar.'
+    action: INVITE_PARTY_TARGET
+    visible-when: online
+    close-on-click: true
+
+  tpa:
+    slot: 16
+    material: ENDER_PEARL
+    name: '&a&lSolicitar viaje'
+    lore:
+      - ''
+      - '&7Envía una solicitud de TPA'
+      - '&7a &e{target}&7.'
+      - ''
+      - '&eClick para solicitar.'
+    action: COMMAND_PLAYER
+    visible-when: online
+    commands:
+      - 'tpa {target}'
+
+  offline_info:
+    slot: 14
+    material: GRAY_DYE
+    name: '&8&lCompañero desconectado'
+    lore:
+      - ''
+      - '&7Este jugador no está conectado.'
+      - '&7Puedes enviarle una carta,'
+      - '&7pero no invitarlo a party ni TPA.'
+    visible-when: offline
+
+  volver:
+    slot: 22
+    material: PLAYER_HEAD
+    texture: 'eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmQ2OWUwNmU1ZGFkZmQ4NGU1ZjNkMWMyMTA2M2YyNTUzYjJmYTk0NWVlMWQ0ZDcxNTJmZGM1NDI1YmMxMmE5In19fQ=='
+    name: '&6&lVolver'
+    lore:
+      - '&7Regresa al menú social.'
+    action: COMMAND_PLAYER
+    commands:
+      - 'friends'
+""";
+    }
+
     private void loadCustomMenus() {
         customMenus.clear();
         File folder = new File(getDataFolder(), "Menus");
@@ -893,7 +997,8 @@ items:
                     action,
                     target,
                     commands,
-                    sec.getBoolean("close-on-click", true)
+                    sec.getBoolean("close-on-click", true),
+                    sec.getString("visible-when", sec.getString("show-when", "always"))
             );
             items.add(item);
         }
@@ -910,6 +1015,8 @@ items:
             case "OPEN_TITLE", "OPEN_TITLES", "TITLES" -> "OPEN_TITLES";
             case "OPEN_MAIL", "OPEN_MAILBOX", "MAILBOX", "BUZON" -> "OPEN_MAILBOX";
             case "START_MAIL", "START_MAIL_SEND", "SEND_MAIL", "ENVIAR_CARTA" -> "START_MAIL_SEND";
+            case "START_MAIL_TARGET", "START_MAIL_SEND_TARGET", "SEND_MAIL_TARGET", "ENVIAR_CARTA_TARGET", "ENVIAR_CARTA_AMIGO" -> "START_MAIL_SEND_TARGET";
+            case "INVITE_PARTY_TARGET", "PARTY_INVITE_TARGET", "INVITAR_PARTY", "INVITAR_GRUPO", "INVITE_FRIEND_PARTY" -> "INVITE_PARTY_TARGET";
             case "START_MAIL_BLOCK", "BLOCK_MAIL", "BLOQUEAR_CARTAS" -> "START_MAIL_BLOCK";
             case "START_MAIL_UNBLOCK", "UNBLOCK_MAIL", "DESBLOQUEAR_CARTAS" -> "START_MAIL_UNBLOCK";
             default -> a;
@@ -924,6 +1031,10 @@ items:
     }
 
     private void openCustomMenu(Player player, String menuId, int page, String previousMenu, int previousPage) {
+        openCustomMenu(player, menuId, page, previousMenu, previousPage, null, "", false);
+    }
+
+    private void openCustomMenu(Player player, String menuId, int page, String previousMenu, int previousPage, UUID targetUuid, String targetName, boolean targetOnline) {
         menuId = normalize(menuId);
         CustomMenuDef def = customMenus.get(menuId);
         if (def == null) {
@@ -932,19 +1043,20 @@ items:
         }
         int maxPage = def.maxPage();
         page = Math.max(1, Math.min(page, maxPage));
-        MenuHolder holder = new MenuHolder("CUSTOM_MENU", page, menuId, previousMenu == null ? "" : normalize(previousMenu), previousPage <= 0 ? 1 : previousPage);
-        Inventory inv = Bukkit.createInventory(holder, def.size, color(def.title.replace("{page}", String.valueOf(page)).replace("{max_page}", String.valueOf(maxPage))));
+        MenuHolder holder = new MenuHolder("CUSTOM_MENU", page, menuId, previousMenu == null ? "" : normalize(previousMenu), previousPage <= 0 ? 1 : previousPage, targetUuid, targetName, targetOnline);
+        Inventory inv = Bukkit.createInventory(holder, def.size, color(applyTargetPlaceholders(def.title.replace("{page}", String.valueOf(page)).replace("{max_page}", String.valueOf(maxPage)), player, targetUuid, targetName, targetOnline)));
         holder.inventory = inv;
         fill(inv);
 
         List<CustomMenuItem> items = def.pages.getOrDefault(page, Collections.emptyList());
         for (CustomMenuItem menuItem : items) {
-            if (menuItem.slot >= 0 && menuItem.slot < inv.getSize()) inv.setItem(menuItem.slot, customMenuItemStack(player, menuItem));
+            if (!menuItem.isVisible(targetUuid, targetOnline)) continue;
+            if (menuItem.slot >= 0 && menuItem.slot < inv.getSize()) inv.setItem(menuItem.slot, customMenuItemStack(player, menuItem, targetUuid, targetName, targetOnline));
         }
         player.openInventory(inv);
     }
 
-    private ItemStack customMenuItemStack(Player player, CustomMenuItem def) {
+    private ItemStack customMenuItemStack(Player player, CustomMenuItem def, UUID targetUuid, String targetName, boolean targetOnline) {
         Material mat = Material.matchMaterial(def.material.toUpperCase(Locale.ROOT));
         if (mat == null) mat = Material.PAPER;
         int amount = Math.max(1, Math.min(64, def.amount));
@@ -952,21 +1064,24 @@ items:
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
         if (mat == Material.PLAYER_HEAD && meta instanceof SkullMeta skull) {
-            String texture = applyPlayerPlaceholders(def.texture, player);
+            String texture = applyTargetPlaceholders(def.texture, player, targetUuid, targetName, targetOnline);
             if (texture != null && !texture.isBlank()) {
                 applySkullTexture(skull, texture);
             } else if (def.headOwner != null && !def.headOwner.isBlank()) {
-                OfflinePlayer owner = Bukkit.getOfflinePlayer(applyPlayerPlaceholders(def.headOwner, player));
+                OfflinePlayer owner = Bukkit.getOfflinePlayer(applyTargetPlaceholders(def.headOwner, player, targetUuid, targetName, targetOnline));
                 skull.setOwningPlayer(owner);
             }
             meta = skull;
         }
-        if (def.name != null && !def.name.isBlank()) meta.setDisplayName(color(applyPlayerPlaceholders(def.name, player)));
+        if (def.name != null && !def.name.isBlank()) meta.setDisplayName(color(applyTargetPlaceholders(def.name, player, targetUuid, targetName, targetOnline)));
         List<String> lore = new ArrayList<>();
-        for (String line : def.lore) lore.add(color(applyPlayerPlaceholders(line, player)));
+        for (String line : def.lore) lore.add(color(applyTargetPlaceholders(line, player, targetUuid, targetName, targetOnline)));
         if (!lore.isEmpty()) meta.setLore(lore);
         if (def.action != null && !def.action.isBlank()) meta.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, def.action);
         if (def.targetMenu != null && !def.targetMenu.isBlank()) meta.getPersistentDataContainer().set(keyTargetMenu, PersistentDataType.STRING, def.targetMenu);
+        if (targetUuid != null) meta.getPersistentDataContainer().set(keyFriendTargetUuid, PersistentDataType.STRING, targetUuid.toString());
+        if (targetName != null && !targetName.isBlank()) meta.getPersistentDataContainer().set(keyFriendTargetName, PersistentDataType.STRING, targetName);
+        meta.getPersistentDataContainer().set(keyFriendTargetOnline, PersistentDataType.STRING, String.valueOf(targetOnline));
         if (!def.commands.isEmpty()) meta.getPersistentDataContainer().set(keyCommands, PersistentDataType.STRING, String.join("\n", def.commands));
         meta.getPersistentDataContainer().set(keyCloseOnClick, PersistentDataType.STRING, String.valueOf(def.closeOnClick));
         item.setItemMeta(meta);
@@ -1070,6 +1185,24 @@ items:
         return out;
     }
 
+    private String applyTargetPlaceholders(String input, Player player, UUID targetUuid, String targetName, boolean targetOnline) {
+        String out = applyPlayerPlaceholders(input, player);
+        String safeName = targetName == null || targetName.isBlank() ? "jugador" : targetName;
+        String uuidText = targetUuid == null ? "" : targetUuid.toString();
+        out = out
+                .replace("{target}", safeName)
+                .replace("{target_name}", safeName)
+                .replace("{friend}", safeName)
+                .replace("{friend_name}", safeName)
+                .replace("{target_uuid}", uuidText)
+                .replace("{friend_uuid}", uuidText)
+                .replace("{target_online}", targetOnline ? "true" : "false")
+                .replace("{friend_online}", targetOnline ? "true" : "false")
+                .replace("{target_status}", targetOnline ? "&aEn línea" : "&7Desconectado")
+                .replace("{friend_status}", targetOnline ? "&aEn línea" : "&7Desconectado");
+        return out;
+    }
+
     private String papi(Player player, String placeholder) {
         try {
             String value = PlaceholderAPI.setPlaceholders(player, placeholder);
@@ -1170,6 +1303,18 @@ items:
         if (!player.hasPermission("mdvsocial.mail.send")) { msg(player, "no-permission"); return; }
         mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.RECIPIENT, null, returnMenu, returnPage));
         msg(player, "mail-recipient-prompt");
+    }
+
+    private void startMailMessagePromptToTarget(Player player, UUID targetUuid, String fallbackName, String returnMenu, int returnPage) {
+        if (!mailEnabled()) { msg(player, "mail-disabled"); return; }
+        if (!player.hasPermission("mdvsocial.mail.send")) { msg(player, "no-permission"); return; }
+        if (targetUuid == null) { msg(player, "social-target-not-found"); return; }
+        if (targetUuid.equals(player.getUniqueId())) { msg(player, "mail-self"); return; }
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
+        String targetName = target.getName() == null || target.getName().isBlank() ? fallbackName : target.getName();
+        if (targetName == null || targetName.isBlank()) targetName = "jugador";
+        mailSessions.put(player.getUniqueId(), new MailComposeSession(MailStage.MESSAGE, targetName, targetUuid, returnMenu, returnPage));
+        msg(player, "mail-message-prompt", Map.of("target", targetName, "max", String.valueOf(getMaxMailLength())));
     }
 
     private void startMailBlockPrompt(Player player, boolean block) {
@@ -2032,6 +2177,71 @@ items:
         return out;
     }
 
+    private boolean handleExternalFriendOptionsClick(InventoryClickEvent event, Player player) {
+        if (!getConfig().getBoolean("social-friend-options.enabled", true)) return false;
+        if (event.getClickedInventory() == null) return false;
+        if (!event.getClickedInventory().equals(event.getView().getTopInventory())) return false;
+
+        String clickMode = getConfig().getString("social-friend-options.click", "LEFT");
+        if (!matchesConfiguredClick(event.getClick(), clickMode)) return false;
+
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) return false;
+        List<Integer> slots = getConfig().getIntegerList("social-friend-options.slots");
+        if (!slots.isEmpty() && !slots.contains(slot)) return false;
+
+        String title = ChatColor.stripColor(event.getView().getTitle());
+        if (title == null) title = event.getView().getTitle();
+        String normalizedTitle = title == null ? "" : title.trim().toLowerCase(Locale.ROOT);
+        String equals = ChatColor.stripColor(color(getConfig().getString("social-friend-options.title", ""))).trim().toLowerCase(Locale.ROOT);
+        String contains = ChatColor.stripColor(color(getConfig().getString("social-friend-options.title-contains", ""))).trim().toLowerCase(Locale.ROOT);
+        boolean titleMatches = (!equals.isBlank() && normalizedTitle.equals(equals)) || (!contains.isBlank() && normalizedTitle.contains(contains));
+        if (!titleMatches && equals.isBlank() && contains.isBlank()) titleMatches = true;
+        if (!titleMatches) return false;
+
+        ItemStack clicked = event.getCurrentItem();
+        UUID targetUuid = extractMMOCoreFriendUuid(clicked);
+        if (targetUuid == null) return false;
+
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
+        String targetName = target.getName() == null || target.getName().isBlank() ? "jugador" : target.getName();
+        boolean targetOnline = Bukkit.getPlayer(targetUuid) != null;
+
+        event.setCancelled(getConfig().getBoolean("social-friend-options.cancel-event", true));
+        String targetMenu = normalize(getConfig().getString("social-friend-options.target-menu", "amigo_opciones"));
+        Bukkit.getScheduler().runTask(this, () -> openCustomMenu(player, targetMenu, 1, "", 1, targetUuid, targetName, targetOnline));
+        return true;
+    }
+
+    private boolean matchesConfiguredClick(org.bukkit.event.inventory.ClickType click, String configured) {
+        String value = configured == null ? "LEFT" : configured.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        return switch (value) {
+            case "ANY", "ALL" -> true;
+            case "LEFT", "LEFT_CLICK" -> click == org.bukkit.event.inventory.ClickType.LEFT;
+            case "SHIFT_LEFT", "SHIFT_LEFT_CLICK" -> click == org.bukkit.event.inventory.ClickType.SHIFT_LEFT;
+            case "RIGHT", "RIGHT_CLICK" -> click == org.bukkit.event.inventory.ClickType.RIGHT;
+            case "SHIFT_RIGHT", "SHIFT_RIGHT_CLICK" -> click == org.bukkit.event.inventory.ClickType.SHIFT_RIGHT;
+            default -> click == org.bukkit.event.inventory.ClickType.LEFT;
+        };
+    }
+
+    private UUID extractMMOCoreFriendUuid(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return null;
+        PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
+        for (org.bukkit.NamespacedKey key : pdc.getKeys()) {
+            if (!key.getNamespace().equalsIgnoreCase("mmocore")) continue;
+            if (!key.getKey().equalsIgnoreCase("Uuid")) continue;
+            String value = pdc.get(key, PersistentDataType.STRING);
+            if (value == null || value.isBlank()) return null;
+            try {
+                return UUID.fromString(value);
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     private boolean handleExternalGuiClick(InventoryClickEvent event, Player player) {
         if (externalGuiActions.isEmpty()) return false;
         if (event.getClickedInventory() == null) return false;
@@ -2079,6 +2289,7 @@ items:
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!(event.getInventory().getHolder() instanceof MenuHolder holder)) {
+            if (handleExternalFriendOptionsClick(event, player)) return;
             handleExternalGuiClick(event, player);
             return;
         }
@@ -2106,11 +2317,19 @@ items:
                 if (holder.previousMenu != null && !holder.previousMenu.isBlank()) openCustomMenu(player, holder.previousMenu, holder.previousPage, "", 1);
                 else openSocialStart(player);
             }
-            case "COMMAND_PLAYER" -> runPlayerCommandsFromPdc(player, pdc);
+            case "COMMAND_PLAYER" -> runPlayerCommandsFromPdc(player, pdc, holder);
             case "OPEN_MAILBOX" -> openMailbox(player, 0);
             case "START_MAIL_SEND" -> {
                 if (shouldCloseOnClick(pdc)) player.closeInventory();
                 startMailRecipientPrompt(player, holder.menuId.isBlank() ? "correo" : holder.menuId, holder.page);
+            }
+            case "START_MAIL_SEND_TARGET" -> {
+                if (shouldCloseOnClick(pdc)) player.closeInventory();
+                startMailMessagePromptToTarget(player, holder.targetUuid, holder.targetName, holder.menuId.isBlank() ? "correo" : holder.menuId, holder.page);
+            }
+            case "INVITE_PARTY_TARGET" -> {
+                if (shouldCloseOnClick(pdc)) player.closeInventory();
+                inviteFriendToParty(player, holder.targetUuid, holder.targetName);
             }
             case "START_MAIL_BLOCK" -> {
                 if (shouldCloseOnClick(pdc)) player.closeInventory();
@@ -2179,16 +2398,115 @@ items:
 
 
     private void runPlayerCommandsFromPdc(Player player, PersistentDataContainer pdc) {
+        runPlayerCommandsFromPdc(player, pdc, null);
+    }
+
+    private void runPlayerCommandsFromPdc(Player player, PersistentDataContainer pdc, MenuHolder holder) {
         String raw = pdc.get(keyCommands, PersistentDataType.STRING);
         if (raw == null || raw.isBlank()) return;
         String close = pdc.get(keyCloseOnClick, PersistentDataType.STRING);
         if (close == null || Boolean.parseBoolean(close)) player.closeInventory();
+        UUID targetUuid = holder == null ? readUuidFromPdc(pdc) : holder.targetUuid;
+        String targetName = holder == null ? pdc.get(keyFriendTargetName, PersistentDataType.STRING) : holder.targetName;
+        boolean targetOnline = holder != null && holder.targetOnline;
+        String onlineRaw = pdc.get(keyFriendTargetOnline, PersistentDataType.STRING);
+        if (holder == null && onlineRaw != null) targetOnline = Boolean.parseBoolean(onlineRaw);
         for (String line : raw.split("\\n")) {
-            String cmd = applyPlayerPlaceholders(line, player).trim();
+            String cmd = applyTargetPlaceholders(line, player, targetUuid, targetName, targetOnline).trim();
             if (cmd.isBlank()) continue;
             if (cmd.startsWith("/")) cmd = cmd.substring(1);
             Bukkit.dispatchCommand(player, cmd);
         }
+    }
+
+    private UUID readUuidFromPdc(PersistentDataContainer pdc) {
+        String raw = pdc.get(keyFriendTargetUuid, PersistentDataType.STRING);
+        if (raw == null || raw.isBlank()) return null;
+        try { return UUID.fromString(raw); } catch (Exception ignored) { return null; }
+    }
+
+    private void inviteFriendToParty(Player player, UUID targetUuid, String fallbackName) {
+        if (targetUuid == null) { msg(player, "social-target-not-found"); return; }
+        Player targetPlayer = Bukkit.getPlayer(targetUuid);
+        String targetName = targetPlayer != null ? targetPlayer.getName() : (fallbackName == null || fallbackName.isBlank() ? "jugador" : fallbackName);
+        if (targetPlayer == null) {
+            msg(player, "party-target-offline", Map.of("target", targetName));
+            return;
+        }
+        if (targetUuid.equals(player.getUniqueId())) {
+            msg(player, "party-self");
+            return;
+        }
+        if (!Bukkit.getPluginManager().isPluginEnabled("MMOCore")) {
+            msg(player, "party-mmocore-missing");
+            return;
+        }
+
+        try {
+            Class<?> playerDataClass = Class.forName("net.Indyuce.mmocore.api.player.PlayerData");
+            Method getData = playerDataClass.getMethod("get", OfflinePlayer.class);
+            Object playerData = getData.invoke(null, player);
+            Object targetData = getData.invoke(null, targetPlayer);
+            Method getParty = playerDataClass.getMethod("getParty");
+            Object party = getParty.invoke(playerData);
+
+            if (party == null) {
+                String behavior = getConfig().getString("social-friend-options.party.when-no-party", "message");
+                if (behavior != null && (behavior.equalsIgnoreCase("create") || behavior.equalsIgnoreCase("auto-create") || behavior.equalsIgnoreCase("create-and-invite") || behavior.equalsIgnoreCase("create_and_invite"))) {
+                    party = createMMOCoreParty(playerData);
+                    if (party != null) msg(player, "party-auto-created");
+                } else {
+                    msg(player, "party-must-create", Map.of("target", targetName));
+                    return;
+                }
+            }
+
+            if (party == null) {
+                msg(player, "party-error");
+                return;
+            }
+
+            try {
+                Method hasMember = party.getClass().getMethod("hasMember", UUID.class);
+                Object already = hasMember.invoke(party, targetUuid);
+                if (already instanceof Boolean b && b) {
+                    msg(player, "party-target-already-member", Map.of("target", targetName));
+                    return;
+                }
+            } catch (NoSuchMethodException ignored) { }
+
+            int max = Math.max(2, getConfig().getInt("social-friend-options.party.max-members", 5));
+            try {
+                Method countMembers = party.getClass().getMethod("countMembers");
+                Object count = countMembers.invoke(party);
+                if (count instanceof Number n && n.intValue() >= max) {
+                    msg(player, "party-full", Map.of("max", String.valueOf(max)));
+                    return;
+                }
+            } catch (NoSuchMethodException ignored) { }
+
+            Method invite;
+            try {
+                invite = party.getClass().getMethod("sendPartyInvite", playerDataClass, playerDataClass);
+            } catch (NoSuchMethodException ignored) {
+                invite = party.getClass().getMethod("sendInvite", playerDataClass, playerDataClass);
+            }
+            invite.invoke(party, playerData, targetData);
+            msg(player, "party-invite-sent", Map.of("target", targetName));
+        } catch (Throwable ex) {
+            getLogger().warning("No se pudo invitar amigo a party: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
+            msg(player, "party-error");
+        }
+    }
+
+    private Object createMMOCoreParty(Object playerData) throws Exception {
+        Class<?> mmocoreClass = Class.forName("net.Indyuce.mmocore.MMOCore");
+        Object mmocore = mmocoreClass.getField("plugin").get(null);
+        if (mmocore == null) return null;
+        Object partyModule = mmocoreClass.getField("partyModule").get(mmocore);
+        if (partyModule == null) return null;
+        Method create = partyModule.getClass().getMethod("newRegisteredParty", playerData.getClass());
+        return create.invoke(partyModule, playerData);
     }
 
     private void runConfiguredCommands(Player player, String path) {
@@ -2484,18 +2802,28 @@ items:
         final String menuId;
         final String previousMenu;
         final int previousPage;
+        final UUID targetUuid;
+        final String targetName;
+        final boolean targetOnline;
         Inventory inventory;
 
         MenuHolder(String type, int page) {
-            this(type, page, "", "", 1);
+            this(type, page, "", "", 1, null, "", false);
         }
 
         MenuHolder(String type, int page, String menuId, String previousMenu, int previousPage) {
+            this(type, page, menuId, previousMenu, previousPage, null, "", false);
+        }
+
+        MenuHolder(String type, int page, String menuId, String previousMenu, int previousPage, UUID targetUuid, String targetName, boolean targetOnline) {
             this.type = type;
             this.page = page;
             this.menuId = menuId == null ? "" : menuId;
             this.previousMenu = previousMenu == null ? "" : previousMenu;
             this.previousPage = previousPage <= 0 ? 1 : previousPage;
+            this.targetUuid = targetUuid;
+            this.targetName = targetName == null ? "" : targetName;
+            this.targetOnline = targetOnline;
         }
         @Override
         public Inventory getInventory() {
@@ -2562,8 +2890,9 @@ items:
         final String targetMenu;
         final List<String> commands;
         final boolean closeOnClick;
+        final String visibleWhen;
 
-        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick) {
+        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen) {
             this.id = id;
             this.slot = slot;
             this.material = material == null ? "PAPER" : material;
@@ -2576,6 +2905,16 @@ items:
             this.targetMenu = targetMenu == null ? "" : targetMenu;
             this.commands = commands == null ? Collections.emptyList() : commands;
             this.closeOnClick = closeOnClick;
+            this.visibleWhen = visibleWhen == null ? "always" : visibleWhen.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        }
+
+        boolean isVisible(UUID targetUuid, boolean targetOnline) {
+            return switch (visibleWhen) {
+                case "online", "target_online", "friend_online" -> targetUuid != null && targetOnline;
+                case "offline", "target_offline", "friend_offline" -> targetUuid != null && !targetOnline;
+                case "target", "has_target", "friend", "has_friend" -> targetUuid != null;
+                default -> true;
+            };
         }
     }
 
