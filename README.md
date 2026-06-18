@@ -1,4 +1,4 @@
-# MDVSocial 1.2.4
+# MDVSocial 1.2.5
 
 Plugin social modular para MDVCRAFT.
 
@@ -74,3 +74,48 @@ Datos:
 - `mail-data.yml` guarda cartas y bloqueos.
 
 Las cartas expiran automáticamente según `mail.expire-after-days`.
+
+
+## MDVSocial 1.2.5
+
+Agrega sincronizacion automatica para AnimatedScoreboard cuando el jugador esta en party de MMOCore.
+
+- Al entrar al servidor: `animatedscoreboard.party = false` por seguridad.
+- Si el jugador esta en party: `animatedscoreboard.party = true`.
+- Si el jugador sale de party: `animatedscoreboard.party = false`.
+- La sincronizacion se revisa cada `scoreboard-party-permission.sync-interval-ticks` ticks.
+
+Bloque de config recomendado:
+
+```yaml
+scoreboard-party-permission:
+  enabled: true
+  permission: animatedscoreboard.party
+  reset-on-join: true
+  sync-interval-ticks: 20
+  debug: false
+```
+
+Config recomendada en AnimatedScoreboard:
+
+```yaml
+worlds:
+  global:
+  - mdvcraftparty
+  - defaultscoreboard
+
+  world:
+  - mdvcraftparty
+  - defaultscoreboard
+
+  world_the_end:
+  - mdvcraftparty
+  - defaultscoreboard
+
+  world_nether:
+  - mdvcraftparty
+  - defaultscoreboard
+
+permissions:
+  mdvcraftparty: animatedscoreboard.party
+```

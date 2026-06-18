@@ -22,6 +22,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -66,6 +69,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private final List<ExternalGuiAction> externalGuiActions = new ArrayList<>();
     private final List<Integer> listSlots = new ArrayList<>();
     private final Map<UUID, MailComposeSession> mailSessions = new ConcurrentHashMap<>();
+    private final Map<UUID, PermissionAttachment> scoreboardPartyAttachments = new ConcurrentHashMap<>();
 
     private File dataFile;
     private YamlConfiguration data;
@@ -122,11 +126,24 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         long cleanupMinutes = Math.max(5L, getConfig().getLong("mail.cleanup-interval-minutes", 30L));
         Bukkit.getScheduler().runTaskTimer(this, this::cleanupExpiredMail, 20L * 60L, cleanupMinutes * 60L * 20L);
 
-        getLogger().info("MDVSocial 1.2.4 habilitado.");
+        if (getConfig().getBoolean("scoreboard-party-permission.enabled", true)) {
+            long interval = Math.max(10L, getConfig().getLong("scoreboard-party-permission.sync-interval-ticks", 20L));
+            Bukkit.getScheduler().runTaskTimer(this, this::syncAllScoreboardPartyPermissions, 20L, interval);
+            Bukkit.getScheduler().runTaskLater(this, this::resetAllScoreboardPartyPermissions, 5L);
+        }
+
+        getLogger().info("MDVSocial 1.2.5 habilitado.");
     }
 
     @Override
     public void onDisable() {
+        resetAllScoreboardPartyPermissions();
+        for (PermissionAttachment attachment : scoreboardPartyAttachments.values()) {
+            try {
+                attachment.remove();
+            } catch (Throwable ignored) { }
+        }
+        scoreboardPartyAttachments.clear();
         saveData();
         saveMailData();
     }
@@ -2178,6 +2195,64 @@ items:
         return out;
     }
 
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        if (!getConfig().getBoolean("scoreboard-party-permission.enabled", true)) return;
+        Player player = event.getPlayer();
+        if (getConfig().getBoolean("scoreboard-party-permission.reset-on-join", true)) {
+            setScoreboardPartyPermission(player, false);
+        }
+        Bukkit.getScheduler().runTaskLater(this, () -> syncScoreboardPartyPermission(player), 20L);
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        if (!getConfig().getBoolean("scoreboard-party-permission.enabled", true)) return;
+        Player player = event.getPlayer();
+        setScoreboardPartyPermission(player, false);
+        PermissionAttachment attachment = scoreboardPartyAttachments.remove(player.getUniqueId());
+        if (attachment != null) {
+            try {
+                attachment.remove();
+            } catch (Throwable ignored) { }
+        }
+    }
+
+    private void syncAllScoreboardPartyPermissions() {
+        if (!getConfig().getBoolean("scoreboard-party-permission.enabled", true)) return;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            syncScoreboardPartyPermission(player);
+        }
+    }
+
+    private void resetAllScoreboardPartyPermissions() {
+        if (!getConfig().getBoolean("scoreboard-party-permission.enabled", true)) return;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            setScoreboardPartyPermission(player, false);
+        }
+    }
+
+    private void syncScoreboardPartyPermission(Player player) {
+        if (player == null || !player.isOnline()) return;
+        boolean inParty = getMMOCoreParty(player) != null;
+        setScoreboardPartyPermission(player, inParty);
+    }
+
+    private void setScoreboardPartyPermission(Player player, boolean value) {
+        if (player == null) return;
+        String permission = getConfig().getString("scoreboard-party-permission.permission", "animatedscoreboard.party");
+        if (permission == null || permission.isBlank()) return;
+
+        PermissionAttachment attachment = scoreboardPartyAttachments.computeIfAbsent(player.getUniqueId(), id -> player.addAttachment(this));
+        attachment.setPermission(permission, value);
+        player.recalculatePermissions();
+
+        if (getConfig().getBoolean("scoreboard-party-permission.debug", false)) {
+            getLogger().info("Scoreboard party permission: " + player.getName() + " -> " + permission + " = " + value);
+        }
+    }
+
     private boolean handleExternalFriendOptionsClick(InventoryClickEvent event, Player player) {
         if (!getConfig().getBoolean("social-friend-options.enabled", true)) return false;
         if (event.getClickedInventory() == null) return false;
@@ -2455,7 +2530,10 @@ items:
                 String behavior = getConfig().getString("social-friend-options.party.when-no-party", "message");
                 if (behavior != null && (behavior.equalsIgnoreCase("create") || behavior.equalsIgnoreCase("auto-create") || behavior.equalsIgnoreCase("create-and-invite") || behavior.equalsIgnoreCase("create_and_invite"))) {
                     party = createMMOCoreParty(playerData);
-                    if (party != null) msg(player, "party-auto-created");
+                    if (party != null) {
+                        msg(player, "party-auto-created");
+                        syncScoreboardPartyPermission(player);
+                    }
                 } else {
                     msg(player, "party-must-create", Map.of("target", targetName));
                     return;
@@ -2493,6 +2571,7 @@ items:
                 invite = party.getClass().getMethod("sendInvite", playerDataClass, playerDataClass);
             }
             invite.invoke(party, playerData, targetData);
+            syncScoreboardPartyPermission(player);
             msg(player, "party-invite-sent", Map.of("target", targetName));
         } catch (Throwable ex) {
             getLogger().warning("No se pudo invitar amigo a party: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());

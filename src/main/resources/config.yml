@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.2.4
+# MDVSocial 1.2.5
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -118,6 +118,24 @@ settings:
   # Si un jugador tiene un titulo activo pero ya no cumple permiso/requisito,
   # el placeholder no lo mostrara.
   hide-invalid-active-title: true
+
+# ==========================================================
+# Permiso temporal para scoreboard de party
+#
+# Uso recomendado con AnimatedScoreboard:
+# permissions:
+#   mdvcraftparty: animatedscoreboard.party
+#
+# MDVSocial pondra este permiso en true si el jugador esta en party,
+# y en false si no esta en party. Al entrar al servidor se fuerza false
+# por seguridad y luego se vuelve a sincronizar.
+# ==========================================================
+scoreboard-party-permission:
+  enabled: true
+  permission: animatedscoreboard.party
+  reset-on-join: true
+  sync-interval-ticks: 20
+  debug: false
 
 menus:
   main:
