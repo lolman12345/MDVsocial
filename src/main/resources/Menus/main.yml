@@ -1,7 +1,6 @@
 # ==========================================================
 # MDVSocial - Menu modular principal
-# Acciones disponibles:
-# OPEN_MENU / COMMAND_PLAYER / BACK / CLOSE / PREVIOUS_PAGE / NEXT_PAGE / OPEN_TITLES
+# Acciones disponibles: OPEN_MENU / OPEN_CONDITIONAL_MENU / MDVCLANS_OPEN / COMMAND_PLAYER / BACK / CLOSE
 # ==========================================================
 title: '&8MDVSocial'
 size: 27
@@ -21,9 +20,13 @@ items:
     name: '&aClan'
     lore:
       - '&7Abre el menu de clan.'
+      - '&8Detecta si tienes clan o no.'
       - '&eClick para abrir.'
-    action: OPEN_MENU
-    target-menu: clan
+    action: OPEN_CONDITIONAL_MENU
+    condition-placeholder: '%mdvclans_is_in_clan%'
+    condition-equals: 'true'
+    true-menu: clan_con_clan
+    false-menu: clan_sin_clan
 
   ayuda:
     slot: 15

@@ -1,9 +1,9 @@
 name: MDVSocial
-version: 1.2.5
+version: 1.2.6
 main: com.mdvcraft.mdvsocial.MDVSocialPlugin
 api-version: '1.21'
 author: MDVCRAFT
-softdepend: [PlaceholderAPI, Vault, LuckPerms, MMOCore, Essentials]
+softdepend: [PlaceholderAPI, Vault, LuckPerms, MMOCore, Essentials, MDVClans]
 commands:
   social:
     description: Abre el menu social de MDVCRAFT.

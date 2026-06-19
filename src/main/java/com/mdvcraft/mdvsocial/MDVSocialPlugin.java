@@ -83,6 +83,11 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private org.bukkit.NamespacedKey keyTargetMenu;
     private org.bukkit.NamespacedKey keyCommands;
     private org.bukkit.NamespacedKey keyCloseOnClick;
+    private org.bukkit.NamespacedKey keyConditionPlaceholder;
+    private org.bukkit.NamespacedKey keyConditionEquals;
+    private org.bukkit.NamespacedKey keyTrueMenu;
+    private org.bukkit.NamespacedKey keyFalseMenu;
+    private org.bukkit.NamespacedKey keyClansMenu;
     private org.bukkit.NamespacedKey keyMailId;
     private org.bukkit.NamespacedKey keyMailSender;
     private org.bukkit.NamespacedKey keyFriendTargetUuid;
@@ -97,6 +102,11 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         keyTargetMenu = new org.bukkit.NamespacedKey(this, "target_menu");
         keyCommands = new org.bukkit.NamespacedKey(this, "commands");
         keyCloseOnClick = new org.bukkit.NamespacedKey(this, "close_on_click");
+        keyConditionPlaceholder = new org.bukkit.NamespacedKey(this, "condition_placeholder");
+        keyConditionEquals = new org.bukkit.NamespacedKey(this, "condition_equals");
+        keyTrueMenu = new org.bukkit.NamespacedKey(this, "true_menu");
+        keyFalseMenu = new org.bukkit.NamespacedKey(this, "false_menu");
+        keyClansMenu = new org.bukkit.NamespacedKey(this, "clans_menu");
         keyMailId = new org.bukkit.NamespacedKey(this, "mail_id");
         keyMailSender = new org.bukkit.NamespacedKey(this, "mail_sender");
         keyFriendTargetUuid = new org.bukkit.NamespacedKey(this, "friend_target_uuid");
@@ -132,7 +142,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             Bukkit.getScheduler().runTaskLater(this, this::resetAllScoreboardPartyPermissions, 5L);
         }
 
-        getLogger().info("MDVSocial 1.2.5 habilitado.");
+        getLogger().info("MDVSocial 1.2.6 habilitado.");
     }
 
     @Override
@@ -543,6 +553,22 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                 getLogger().warning("No se pudo crear Menus/clan.yml: " + e.getMessage());
             }
         }
+        File clanConClan = new File(folder, "clan_con_clan.yml");
+        if (!clanConClan.exists()) {
+            try {
+                Files.writeString(clanConClan.toPath(), defaultClanConClanMenuYaml(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                getLogger().warning("No se pudo crear Menus/clan_con_clan.yml: " + e.getMessage());
+            }
+        }
+        File clanSinClan = new File(folder, "clan_sin_clan.yml");
+        if (!clanSinClan.exists()) {
+            try {
+                Files.writeString(clanSinClan.toPath(), defaultClanSinClanMenuYaml(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                getLogger().warning("No se pudo crear Menus/clan_sin_clan.yml: " + e.getMessage());
+            }
+        }
         File ayuda = new File(folder, "ayuda.yml");
         if (!ayuda.exists()) {
             try {
@@ -574,7 +600,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 # ==========================================================
 # MDVSocial - Menu modular principal
 # Acciones disponibles:
-# OPEN_MENU / COMMAND_PLAYER / BACK / CLOSE / PREVIOUS_PAGE / NEXT_PAGE / OPEN_TITLES
+# OPEN_MENU / OPEN_CONDITIONAL_MENU / MDVCLANS_OPEN / COMMAND_PLAYER / BACK / CLOSE / PREVIOUS_PAGE / NEXT_PAGE / OPEN_TITLES
 # ==========================================================
 title: '&8MDVSocial'
 size: 27
@@ -594,9 +620,13 @@ items:
     name: '&aClan'
     lore:
       - '&7Abre el menu de clan.'
+      - '&8Detecta si tienes clan o no.'
       - '&eClick para abrir.'
-    action: OPEN_MENU
-    target-menu: clan
+    action: OPEN_CONDITIONAL_MENU
+    condition-placeholder: '%mdvclans_is_in_clan%'
+    condition-equals: 'true'
+    true-menu: clan_con_clan
+    false-menu: clan_sin_clan
 
   ayuda:
     slot: 15
@@ -621,29 +651,24 @@ items:
 title: '&8Clan'
 size: 27
 items:
-  info:
-    slot: 11
-    material: PAPER
-    name: '&eInformacion del clan'
-    lore:
-      - '&7Ejecuta /clan info como jugador.'
-    action: COMMAND_PLAYER
-    commands:
-      - 'clan info'
-
-  crear:
+  detectar:
     slot: 13
-    material: EMERALD
-    name: '&aCrear clan'
+    material: SHIELD
+    name: '&a&lClanes'
     lore:
-      - '&7Ejecuta /clan create como jugador.'
-      - '&8Despues puedes cambiarlo por otro submenu.'
-    action: COMMAND_PLAYER
-    commands:
-      - 'clan create'
+      - ''
+      - '&7Este menu puente detecta'
+      - '&7si tienes clan o no.'
+      - ''
+      - '&eClick para continuar.'
+    action: OPEN_CONDITIONAL_MENU
+    condition-placeholder: '%mdvclans_is_in_clan%'
+    condition-equals: 'true'
+    true-menu: clan_con_clan
+    false-menu: clan_sin_clan
 
   volver:
-    slot: 18
+    slot: 22
     material: ARROW
     name: '&eVolver'
     action: BACK
@@ -652,6 +677,178 @@ items:
     slot: 26
     material: BARRIER
     name: '&cCerrar'
+    action: CLOSE
+""";
+    }
+
+    private String defaultClanConClanMenuYaml() {
+        return """
+title: '&8&lClan'
+size: 27
+items:
+  gestion:
+    slot: 10
+    material: SHIELD
+    name: '&a&lGestion del clan'
+    lore:
+      - ''
+      - '&7Abre la interfaz dinamica'
+      - '&7principal de tu clan.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: gestion
+
+  miembros:
+    slot: 11
+    material: PLAYER_HEAD
+    head-owner: '{player}'
+    name: '&b&lMiembros'
+    lore:
+      - ''
+      - '&7Lista dinamica con cabezas,'
+      - '&7rangos y opciones por permiso.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: miembros
+
+  info:
+    slot: 12
+    material: WRITABLE_BOOK
+    name: '&e&lTablero e informacion'
+    lore:
+      - ''
+      - '&7Banner, tablero, buzon,'
+      - '&7solicitudes y logs.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: info
+
+  relaciones:
+    slot: 13
+    material: MAP
+    name: '&9&lRelaciones'
+    lore:
+      - ''
+      - '&7Aliados, enemigos,'
+      - '&7bajas y ranking.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: relaciones
+
+  recursos:
+    slot: 14
+    material: CHEST
+    name: '&6&lBanco y almacen'
+    lore:
+      - ''
+      - '&7Accede al banco y al'
+      - '&7almacen del clan.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: almacen
+
+  lista:
+    slot: 15
+    material: WHITE_BANNER
+    name: '&f&lLista de clanes'
+    lore:
+      - ''
+      - '&7Explora otros clanes'
+      - '&7de MDVCRAFT.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: lista
+
+  ajustes:
+    slot: 16
+    material: REDSTONE_TORCH
+    name: '&c&lAjustes del clan'
+    lore:
+      - ''
+      - '&7Opciones de administracion'
+      - '&7para rangos altos.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: ajustes
+
+  base:
+    slot: 22
+    material: ENDER_PEARL
+    name: '&b&lIr a la base'
+    lore:
+      - ''
+      - '&7Teletranspórtate a la base'
+      - '&7definida por el clan.'
+      - ''
+      - '&eClick para viajar.'
+    action: COMMAND_PLAYER
+    commands:
+      - 'clan base'
+
+  volver:
+    slot: 18
+    material: ARROW
+    name: '&6&lVolver'
+    action: BACK
+
+  cerrar:
+    slot: 26
+    material: BARRIER
+    name: '&c&lCerrar'
+    action: CLOSE
+""";
+    }
+
+    private String defaultClanSinClanMenuYaml() {
+        return """
+title: '&8&lClanes'
+size: 27
+items:
+  lista:
+    slot: 11
+    material: WHITE_BANNER
+    name: '&f&lLista de clanes'
+    lore:
+      - ''
+      - '&7Mira los clanes existentes.'
+      - '&7Si uno esta abierto, puedes unirte.'
+      - '&7Si esta cerrado, puedes solicitar ingreso.'
+      - ''
+      - '&eClick para abrir.'
+    action: MDVCLANS_OPEN
+    clans-menu: lista_sinclan
+
+  crear:
+    slot: 15
+    material: EMERALD
+    name: '&a&lCrear clan'
+    lore:
+      - ''
+      - '&7Inicia la creacion de un clan.'
+      - '&7El chat te pedira ID y nombre.'
+      - ''
+      - '&eClick para comenzar.'
+    action: COMMAND_PLAYER
+    commands:
+      - 'clan crear'
+
+  volver:
+    slot: 22
+    material: ARROW
+    name: '&6&lVolver'
+    action: BACK
+
+  cerrar:
+    slot: 26
+    material: BARRIER
+    name: '&c&lCerrar'
     action: CLOSE
 """;
     }
@@ -1016,7 +1213,12 @@ items:
                     target,
                     commands,
                     sec.getBoolean("close-on-click", true),
-                    sec.getString("visible-when", sec.getString("show-when", "always"))
+                    sec.getString("visible-when", sec.getString("show-when", "always")),
+                    sec.getString("condition-placeholder", sec.getString("placeholder", "")),
+                    sec.getString("condition-equals", sec.getString("equals", "true")),
+                    normalize(sec.getString("true-menu", sec.getString("menu-true", ""))),
+                    normalize(sec.getString("false-menu", sec.getString("menu-false", ""))),
+                    normalize(sec.getString("clans-menu", sec.getString("mdvclans-menu", target)))
             );
             items.add(item);
         }
@@ -1028,6 +1230,8 @@ items:
         return switch (a) {
             case "COMMAND", "RUN_COMMAND", "PLAYER_COMMAND", "COMMAND_PLAYER" -> "COMMAND_PLAYER";
             case "OPEN", "OPENMENU", "OPEN_MENU" -> "OPEN_MENU";
+            case "OPEN_CONDITIONAL", "OPEN_CONDITIONAL_MENU", "CONDITIONAL_MENU", "MENU_CONDICIONAL" -> "OPEN_CONDITIONAL_MENU";
+            case "MDVCLANS", "MDVCLANS_OPEN", "OPEN_MDVCLANS", "CLAN_DYNAMIC", "CLANES_DINAMICO" -> "MDVCLANS_OPEN";
             case "PREV_PAGE", "PREVIOUS", "PREVIOUS_PAGE" -> "PREVIOUS_PAGE";
             case "NEXT", "NEXT_PAGE" -> "NEXT_PAGE";
             case "OPEN_TITLE", "OPEN_TITLES", "TITLES" -> "OPEN_TITLES";
@@ -1097,6 +1301,11 @@ items:
         if (!lore.isEmpty()) meta.setLore(lore);
         if (def.action != null && !def.action.isBlank()) meta.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, def.action);
         if (def.targetMenu != null && !def.targetMenu.isBlank()) meta.getPersistentDataContainer().set(keyTargetMenu, PersistentDataType.STRING, def.targetMenu);
+        if (def.conditionPlaceholder != null && !def.conditionPlaceholder.isBlank()) meta.getPersistentDataContainer().set(keyConditionPlaceholder, PersistentDataType.STRING, def.conditionPlaceholder);
+        if (def.conditionEquals != null && !def.conditionEquals.isBlank()) meta.getPersistentDataContainer().set(keyConditionEquals, PersistentDataType.STRING, def.conditionEquals);
+        if (def.trueMenu != null && !def.trueMenu.isBlank()) meta.getPersistentDataContainer().set(keyTrueMenu, PersistentDataType.STRING, def.trueMenu);
+        if (def.falseMenu != null && !def.falseMenu.isBlank()) meta.getPersistentDataContainer().set(keyFalseMenu, PersistentDataType.STRING, def.falseMenu);
+        if (def.clansMenu != null && !def.clansMenu.isBlank()) meta.getPersistentDataContainer().set(keyClansMenu, PersistentDataType.STRING, def.clansMenu);
         if (targetUuid != null) meta.getPersistentDataContainer().set(keyFriendTargetUuid, PersistentDataType.STRING, targetUuid.toString());
         if (targetName != null && !targetName.isBlank()) meta.getPersistentDataContainer().set(keyFriendTargetName, PersistentDataType.STRING, targetName);
         meta.getPersistentDataContainer().set(keyFriendTargetOnline, PersistentDataType.STRING, String.valueOf(targetOnline));
@@ -2356,6 +2565,13 @@ items:
         Bukkit.getScheduler().runTask(this, task);
     }
 
+    private boolean evaluateMenuCondition(Player player, String placeholder, String expected) {
+        if (placeholder == null || placeholder.isBlank()) return false;
+        String value = applyPlayerPlaceholders(placeholder, player);
+        if (expected == null || expected.isBlank()) expected = "true";
+        return value.trim().equalsIgnoreCase(expected.trim());
+    }
+
     private boolean shouldCloseOnClick(PersistentDataContainer pdc) {
         String value = pdc.get(keyCloseOnClick, PersistentDataType.STRING);
         return value == null || !value.equalsIgnoreCase("false");
@@ -2388,6 +2604,21 @@ items:
             case "OPEN_MENU" -> {
                 String target = pdc.get(keyTargetMenu, PersistentDataType.STRING);
                 openCustomMenu(player, target, 1, holder.menuId, holder.page);
+            }
+            case "OPEN_CONDITIONAL_MENU" -> {
+                String placeholder = pdc.get(keyConditionPlaceholder, PersistentDataType.STRING);
+                String expected = pdc.get(keyConditionEquals, PersistentDataType.STRING);
+                String trueMenu = pdc.get(keyTrueMenu, PersistentDataType.STRING);
+                String falseMenu = pdc.get(keyFalseMenu, PersistentDataType.STRING);
+                boolean result = evaluateMenuCondition(player, placeholder, expected);
+                openCustomMenu(player, result ? trueMenu : falseMenu, 1, holder.menuId, holder.page);
+            }
+            case "MDVCLANS_OPEN" -> {
+                if (shouldCloseOnClick(pdc)) player.closeInventory();
+                String clansMenu = pdc.get(keyClansMenu, PersistentDataType.STRING);
+                if (clansMenu == null || clansMenu.isBlank()) clansMenu = pdc.get(keyTargetMenu, PersistentDataType.STRING);
+                if (clansMenu == null || clansMenu.isBlank()) clansMenu = "auto";
+                Bukkit.dispatchCommand(player, "clan abrir " + clansMenu);
             }
             case "BACK" -> {
                 if (holder.previousMenu != null && !holder.previousMenu.isBlank()) openCustomMenu(player, holder.previousMenu, holder.previousPage, "", 1);
@@ -3128,8 +3359,13 @@ items:
         final List<String> commands;
         final boolean closeOnClick;
         final String visibleWhen;
+        final String conditionPlaceholder;
+        final String conditionEquals;
+        final String trueMenu;
+        final String falseMenu;
+        final String clansMenu;
 
-        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen) {
+        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen, String conditionPlaceholder, String conditionEquals, String trueMenu, String falseMenu, String clansMenu) {
             this.id = id;
             this.slot = slot;
             this.material = material == null ? "PAPER" : material;
@@ -3143,6 +3379,11 @@ items:
             this.commands = commands == null ? Collections.emptyList() : commands;
             this.closeOnClick = closeOnClick;
             this.visibleWhen = visibleWhen == null ? "always" : visibleWhen.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+            this.conditionPlaceholder = conditionPlaceholder == null ? "" : conditionPlaceholder;
+            this.conditionEquals = conditionEquals == null ? "true" : conditionEquals;
+            this.trueMenu = trueMenu == null ? "" : trueMenu;
+            this.falseMenu = falseMenu == null ? "" : falseMenu;
+            this.clansMenu = clansMenu == null ? "" : clansMenu;
         }
 
         boolean isVisible(UUID targetUuid, boolean targetOnline) {
