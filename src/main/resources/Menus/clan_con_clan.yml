@@ -31,15 +31,18 @@ items:
   info:
     slot: 12
     material: WRITABLE_BOOK
-    name: '&e&lTablero e informacion'
+    name: '&e&lTablero de informacion'
     lore:
       - ''
-      - '&7Banner, tablero, buzon,'
-      - '&7solicitudes y logs.'
+      - '&7Mensaje actual del clan:'
+      - '&f%mdvclans_board_line_1%'
+      - '&f%mdvclans_board_line_2%'
+      - '&f%mdvclans_board_line_3%'
       - ''
-      - '&eClick para abrir.'
-    action: MDVCLANS_OPEN
-    clans-menu: info
+      - '&eClick para verlo en el chat.'
+    action: COMMAND_PLAYER
+    commands:
+      - 'clan tablero ver'
 
   relaciones:
     slot: 13

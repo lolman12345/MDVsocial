@@ -1,4 +1,4 @@
-# MDVSocial 1.2.6
+# MDVSocial 1.2.7
 
 Plugin social modular para MDVCRAFT.
 
@@ -121,7 +121,7 @@ permissions:
 ```
 
 
-## MDVSocial 1.2.6
+## MDVSocial 1.2.7
 
 Agrega integración directa con MDVClans como motor de clanes.
 
@@ -141,3 +141,8 @@ clans-menu: miembros
 ```
 
 `MDVCLANS_OPEN` ejecuta internamente `/clan abrir <menu>`, así MDVSocial puede tener menús bonitos y MDVClans conserva las UIs dinámicas.
+
+
+## Cambios 1.2.7
+
+- `Menus/clan_con_clan.yml`: el item Tablero de información muestra placeholders de MDVClans y ejecuta `/clan tablero ver` al hacer click.
