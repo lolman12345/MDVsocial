@@ -1,4 +1,4 @@
-# MDVSocial 1.2.7
+# MDVSocial 1.2.8
 
 Plugin social modular para MDVCRAFT.
 
@@ -6,7 +6,7 @@ Plugin social modular para MDVCRAFT.
 
 - Menús modulares en `plugins/MDVSocial/Menus/`.
 - Títulos cosméticos y rangos visuales.
-- Placeholders de título para PlaceholderAPI.
+- Placeholders de título para PlaceholderAPI, incluyendo títulos de otros jugadores.
 - Placeholders inteligentes de party para scoreboard.
 - Puentes para GUIs externas.
 - Menú configurable de opciones de amigo desde la lista de MMOCore.
@@ -16,11 +16,34 @@ Plugin social modular para MDVCRAFT.
 
 ## Placeholders de título
 
+Del jugador que mira/evalúa el placeholder:
+
 - `%mdvsocial_title%`
 - `%mdvsocial_title_colored%`
 - `%mdvsocial_title_prefix%`
+- `%mdvsocial_title_prefix_plain%`
 - `%mdvsocial_active_title%`
+- `%mdvsocial_title_id%`
 - `%mdvsocial_unlocked_titles%`
+
+De otro jugador por nombre:
+
+- `%mdvsocial_title_of_<jugador>%`
+- `%mdvsocial_title_colored_of_<jugador>%`
+- `%mdvsocial_title_prefix_of_<jugador>%`
+- `%mdvsocial_title_prefix_plain_of_<jugador>%`
+- `%mdvsocial_title_id_of_<jugador>%`
+- `%mdvsocial_active_title_of_<jugador>%`
+
+También acepta UUID con `uuid_`:
+
+- `%mdvsocial_title_colored_of_uuid_<uuid>%`
+
+Ejemplo para menús que primero reemplazan `{player}`:
+
+```yaml
+- '&7Título: &r%mdvsocial_title_colored_of_{player}%'
+```
 
 ## Placeholders de party para scoreboard
 
@@ -146,3 +169,29 @@ clans-menu: miembros
 ## Cambios 1.2.7
 
 - `Menus/clan_con_clan.yml`: el item Tablero de información muestra placeholders de MDVClans y ejecuta `/clan tablero ver` al hacer click.
+
+
+## MDVSocial 1.2.8
+
+Agrega MDVSocial como proveedor reutilizable de títulos para otros plugins.
+
+Nuevos placeholders target:
+
+- `%mdvsocial_title_of_<jugador>%`
+- `%mdvsocial_title_colored_of_<jugador>%`
+- `%mdvsocial_title_prefix_of_<jugador>%`
+- `%mdvsocial_title_prefix_plain_of_<jugador>%`
+- `%mdvsocial_title_id_of_<jugador>%`
+- `%mdvsocial_active_title_of_<jugador>%`
+
+Nueva API pública:
+
+```java
+MDVSocialAPI.getEquippedTitle(uuid);
+MDVSocialAPI.getEquippedTitleColored(uuid);
+MDVSocialAPI.getEquippedTitlePlain(uuid);
+MDVSocialAPI.getEquippedTitleId(uuid);
+MDVSocialAPI.getEquippedTitlePrefix(uuid, true);
+```
+
+Esto permite que MDVClans u otros plugins muestren el título equipado de jugadores distintos al jugador que está mirando el menú.

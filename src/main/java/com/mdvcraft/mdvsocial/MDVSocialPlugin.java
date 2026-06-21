@@ -142,7 +142,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             Bukkit.getScheduler().runTaskLater(this, this::resetAllScoreboardPartyPermissions, 5L);
         }
 
-        getLogger().info("MDVSocial 1.2.6 habilitado.");
+        getLogger().info("MDVSocial 1.2.8 habilitado.");
     }
 
     @Override
@@ -3129,6 +3129,36 @@ items:
         return title;
     }
 
+    /**
+     * API publica para otros plugins: devuelve el titulo equipado de cualquier jugador por UUID.
+     * Para jugadores offline no se revalidan permisos dinamicos, solo se lee el titulo guardado/default.
+     */
+    public TitleDef getEquippedTitle(UUID uuid) {
+        if (uuid == null) return null;
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null) return getActiveTitle(online);
+        String id = getActiveTitleId(uuid);
+        if (id.isBlank()) return null;
+        return titles.get(id);
+    }
+
+    public String getEquippedTitleId(UUID uuid) {
+        TitleDef title = getEquippedTitle(uuid);
+        return title == null ? "" : title.id;
+    }
+
+    public String getEquippedTitleDisplay(UUID uuid, boolean colored) {
+        TitleDef title = getEquippedTitle(uuid);
+        if (title == null) return "";
+        return colored ? color(title.display) : stripColor(title.display);
+    }
+
+    public String getEquippedTitlePrefix(UUID uuid, boolean colored) {
+        TitleDef title = getEquippedTitle(uuid);
+        if (title == null) return "";
+        return colored ? color(title.prefix) : stripColor(title.prefix);
+    }
+
     public int countUnlocked(UUID uuid) {
         Set<String> all = new HashSet<>(getDefaultUnlockedTitles());
         all.addAll(getUnlockedTitles(uuid));
@@ -3478,18 +3508,56 @@ items:
 
         @Override
         public String onPlaceholderRequest(Player player, String params) {
-            if (player == null) return "";
+            return handlePlaceholder(player, params);
+        }
+
+        @Override
+        public String onRequest(OfflinePlayer offlinePlayer, String params) {
+            return handlePlaceholder(offlinePlayer, params);
+        }
+
+        private String handlePlaceholder(OfflinePlayer viewer, String params) {
+            if (viewer == null || params == null) return "";
             String p = params.toLowerCase(Locale.ROOT);
-            TitleDef active = plugin.getActiveTitle(player);
+
+            UUID viewerUuid = viewer.getUniqueId();
+            TitleDef active = viewer instanceof Player online ? plugin.getActiveTitle(online) : plugin.getEquippedTitle(viewerUuid);
+
+            String targetValue;
+            if ((targetValue = afterPrefix(p, "title_of_")) != null) return plugin.getEquippedTitleDisplay(resolveTarget(targetValue), false);
+            if ((targetValue = afterPrefix(p, "title_colored_of_")) != null) return plugin.getEquippedTitleDisplay(resolveTarget(targetValue), true);
+            if ((targetValue = afterPrefix(p, "title_prefix_of_")) != null) return plugin.getEquippedTitlePrefix(resolveTarget(targetValue), true);
+            if ((targetValue = afterPrefix(p, "title_prefix_plain_of_")) != null) return plugin.getEquippedTitlePrefix(resolveTarget(targetValue), false);
+            if ((targetValue = afterPrefix(p, "title_id_of_")) != null) return plugin.getEquippedTitleId(resolveTarget(targetValue));
+            if ((targetValue = afterPrefix(p, "active_title_of_")) != null) return plugin.getEquippedTitleId(resolveTarget(targetValue));
+
             return switch (p) {
                 case "title" -> active == null ? "" : ChatColor.stripColor(plugin.color(active.display));
                 case "title_colored" -> active == null ? "" : plugin.color(active.display);
                 case "title_prefix" -> active == null ? "" : plugin.color(active.prefix);
-                case "active_title" -> active == null ? "" : active.id;
-                case "unlocked_titles" -> String.valueOf(plugin.countUnlocked(player.getUniqueId()));
-                case "party_header", "party_count", "party_max", "party_in_group", "party_in_party", "party_spacer", "party_members" -> plugin.partyScoreboardPlaceholder(player, p);
-                default -> p.startsWith("party_member_") ? plugin.partyScoreboardPlaceholder(player, p) : "";
+                case "title_prefix_plain" -> active == null ? "" : ChatColor.stripColor(plugin.color(active.prefix));
+                case "active_title", "title_id" -> active == null ? "" : active.id;
+                case "unlocked_titles" -> String.valueOf(plugin.countUnlocked(viewerUuid));
+                case "party_header", "party_count", "party_max", "party_in_group", "party_in_party", "party_spacer", "party_members" ->
+                        viewer instanceof Player online ? plugin.partyScoreboardPlaceholder(online, p) : "";
+                default -> p.startsWith("party_member_") && viewer instanceof Player online ? plugin.partyScoreboardPlaceholder(online, p) : "";
             };
+        }
+
+        private String afterPrefix(String value, String prefix) {
+            return value.startsWith(prefix) ? value.substring(prefix.length()) : null;
+        }
+
+        private UUID resolveTarget(String token) {
+            if (token == null || token.isBlank()) return null;
+            String raw = token.trim();
+            if (raw.startsWith("uuid_")) raw = raw.substring("uuid_".length());
+            try {
+                return UUID.fromString(raw);
+            } catch (IllegalArgumentException ignored) {
+                OfflinePlayer offline = Bukkit.getOfflinePlayer(raw);
+                return offline == null ? null : offline.getUniqueId();
+            }
         }
     }
 }
