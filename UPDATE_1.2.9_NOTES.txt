@@ -1,0 +1,42 @@
+MDVSocial 1.2.9 - Cartas de invitación de clan
+
+Cambios principales:
+- Nueva API pública:
+  MDVSocialAPI.sendClanInviteMail(...)
+- MDVClans puede enviar invitaciones de clan al correo personal de MDVSocial.
+- Las cartas de invitación de clan muestran botones especiales:
+  Aceptar invitación
+  Rechazar invitación
+- Aceptar ejecuta como jugador:
+  /clan aceptar <ID>
+- Rechazar ejecuta como jugador:
+  /clan rechazar <ID>
+- Tras aceptar o rechazar, la carta se elimina del buzón personal.
+
+Config nueva sugerida en config.yml:
+mail:
+  clan-invites:
+    ignore-mailbox-limit: true
+
+Nuevos items configurables:
+mail:
+  items:
+    clan-invite-accept:
+      material: LIME_DYE
+      name: '&a&lAceptar invitación'
+      lore:
+        - ''
+        - '&7Acepta la invitación al clan.'
+        - '&8Solo podrás entrar si hay cupo'
+        - '&8y la invitación sigue vigente.'
+        - ''
+        - '&eClick para aceptar.'
+    clan-invite-reject:
+      material: RED_DYE
+      name: '&c&lRechazar invitación'
+      lore:
+        - ''
+        - '&7Rechaza la invitación al clan.'
+        - '&8La carta será eliminada.'
+        - ''
+        - '&eClick para rechazar.'

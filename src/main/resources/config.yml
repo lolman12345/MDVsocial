@@ -285,6 +285,8 @@ mail:
   default-mailbox-size: 10
   max-message-length: 180
   allow-unknown-targets: false
+  clan-invites:
+    ignore-mailbox-limit: true
 
   # Cantidad de nombres sugeridos cuando se escribe mal un jugador.
   name-suggestions-limit: 5
@@ -362,6 +364,25 @@ mail:
       lore:
         - '&7Elimina esta carta de tu buzon.'
         - '&8Esta accion no se puede deshacer.'
+    clan-invite-accept:
+      material: LIME_DYE
+      name: '&a&lAceptar invitación'
+      lore:
+        - ''
+        - '&7Acepta la invitación al clan.'
+        - '&8Solo podrás entrar si hay cupo'
+        - '&8y la invitación sigue vigente.'
+        - ''
+        - '&eClick para aceptar.'
+    clan-invite-reject:
+      material: RED_DYE
+      name: '&c&lRechazar invitación'
+      lore:
+        - ''
+        - '&7Rechaza la invitación al clan.'
+        - '&8La carta será eliminada.'
+        - ''
+        - '&eClick para rechazar.'
     block-sender:
       material: BARRIER
       name: '&c&lBloquear remitente'

@@ -44,4 +44,9 @@ public final class MDVSocialAPI {
         MDVSocialPlugin plugin = plugin();
         return plugin == null ? "" : plugin.getEquippedTitlePrefix(uuid, colored);
     }
+    public static boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, long expiresAt) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin != null && plugin.sendClanInviteMail(targetUuid, targetName, inviterUuid, fromName, clanTag, clanName, message, expiresAt);
+    }
+
 }

@@ -1728,7 +1728,7 @@ items:
         msg(sender, "mail-broadcast-sent", Map.of("sent", String.valueOf(sent), "skipped", String.valueOf(skipped)));
     }
 
-    private void storeMail(UUID targetUuid, String toName, String fromUuid, String fromName, String message, long expiresAt) {
+    private String storeMail(UUID targetUuid, String toName, String fromUuid, String fromName, String message, long expiresAt) {
         String id = UUID.randomUUID().toString();
         long now = System.currentTimeMillis();
         String base = mailPath(targetUuid, "letters." + id);
@@ -1739,6 +1739,32 @@ items:
         mailData.set(base + ".sent-at", now);
         mailData.set(base + ".expires-at", expiresAt);
         mailData.set(base + ".read", false);
+        return id;
+    }
+
+    public boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, long expiresAt) {
+        if (!mailEnabled() || targetUuid == null || clanTag == null || clanTag.isBlank()) return false;
+        String clean = sanitizeMailMessage(message);
+        if (clean.isBlank()) clean = "El clan " + clanName + " [" + clanTag + "] te invitó a unirte.";
+        int max = getMaxMailLength();
+        if (clean.length() > max) clean = clean.substring(0, Math.max(0, max - 3)) + "...";
+
+        boolean ignoreLimit = getConfig().getBoolean("mail.clan-invites.ignore-mailbox-limit", true);
+        if (!ignoreLimit) {
+            OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
+            int limit = getMailboxLimit(target);
+            int count = getMailIds(targetUuid).size();
+            if (count >= limit) return false;
+        }
+
+        String id = storeMail(targetUuid, targetName == null || targetName.isBlank() ? "jugador" : targetName, inviterUuid == null ? "" : inviterUuid.toString(), fromName == null || fromName.isBlank() ? "MDVClans" : fromName, clean, expiresAt);
+        String base = mailPath(targetUuid, "letters." + id);
+        mailData.set(base + ".type", "MDVCLANS_INVITE");
+        mailData.set(base + ".clan-tag", clanTag);
+        mailData.set(base + ".clan-name", clanName == null || clanName.isBlank() ? clanTag : clanName);
+        mailData.set(base + ".inviter-uuid", inviterUuid == null ? "" : inviterUuid.toString());
+        saveMailData();
+        return true;
     }
 
     private String sanitizeMailMessage(String message) {
@@ -1908,6 +1934,8 @@ items:
         String fromName = mailData.getString(base + ".from-name", "Desconocido");
         String fromUuid = mailData.getString(base + ".from-uuid", "");
         String message = mailData.getString(base + ".message", "");
+        String mailType = mailData.getString(base + ".type", "");
+        boolean clanInviteMail = "MDVCLANS_INVITE".equalsIgnoreCase(mailType);
         long sentAt = mailData.getLong(base + ".sent-at", 0L);
         long expiresAt = mailData.getLong(base + ".expires-at", 0L);
 
@@ -1932,14 +1960,37 @@ items:
         inv.setItem(getConfig().getInt("mail.menus.read.letter-slot", 13), letter);
 
         inv.setItem(getConfig().getInt("mail.menus.read.back-slot", 11), mailActionItem("items.back", "MAIL_BACK", id, fromUuid));
-        inv.setItem(getConfig().getInt("mail.menus.read.reply-slot", 14), mailActionItem("mail.items.reply", "REPLY_MAIL", id, fromUuid));
-        inv.setItem(getConfig().getInt("mail.menus.read.delete-slot", 15), mailActionItem("mail.items.delete", "DELETE_MAIL", id, fromUuid));
-        inv.setItem(getConfig().getInt("mail.menus.read.block-slot", 16), mailActionItem("mail.items.block-sender", "BLOCK_MAIL_SENDER", id, fromUuid));
+        if (clanInviteMail) {
+            inv.setItem(getConfig().getInt("mail.menus.read.reply-slot", 14), mailActionItem("mail.items.clan-invite-accept", "ACCEPT_CLAN_INVITE", id, fromUuid, Material.LIME_DYE, "&a&lAceptar invitación", List.of("", "&7Acepta la invitación", "&7y entra al clan si hay cupo.", "", "&eClick para aceptar.")));
+            inv.setItem(getConfig().getInt("mail.menus.read.delete-slot", 15), mailActionItem("mail.items.clan-invite-reject", "REJECT_CLAN_INVITE", id, fromUuid, Material.RED_DYE, "&c&lRechazar invitación", List.of("", "&7Rechaza la invitación", "&7y elimina esta carta.", "", "&eClick para rechazar.")));
+            inv.setItem(getConfig().getInt("mail.menus.read.block-slot", 16), mailActionItem("mail.items.delete", "DELETE_MAIL", id, fromUuid));
+        } else {
+            inv.setItem(getConfig().getInt("mail.menus.read.reply-slot", 14), mailActionItem("mail.items.reply", "REPLY_MAIL", id, fromUuid));
+            inv.setItem(getConfig().getInt("mail.menus.read.delete-slot", 15), mailActionItem("mail.items.delete", "DELETE_MAIL", id, fromUuid));
+            inv.setItem(getConfig().getInt("mail.menus.read.block-slot", 16), mailActionItem("mail.items.block-sender", "BLOCK_MAIL_SENDER", id, fromUuid));
+        }
         player.openInventory(inv);
     }
 
     private ItemStack mailActionItem(String path, String action, String mailId, String senderUuid) {
-        ItemStack item = itemFromSection(getConfig().getConfigurationSection(path), action, null);
+        return mailActionItem(path, action, mailId, senderUuid, Material.PAPER, "", List.of());
+    }
+
+    private ItemStack mailActionItem(String path, String action, String mailId, String senderUuid, Material defMaterial, String defName, List<String> defLore) {
+        ConfigurationSection sec = getConfig().getConfigurationSection(path);
+        ItemStack item;
+        if (sec == null) {
+            item = new ItemStack(defMaterial == null ? Material.PAPER : defMaterial);
+            ItemMeta meta = item.getItemMeta();
+            if (meta != null) {
+                if (defName != null && !defName.isBlank()) meta.setDisplayName(color(defName));
+                if (defLore != null && !defLore.isEmpty()) meta.setLore(defLore.stream().map(this::color).collect(Collectors.toList()));
+                if (action != null && !action.isBlank()) meta.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, action);
+                item.setItemMeta(meta);
+            }
+        } else {
+            item = itemFromSection(sec, action, null);
+        }
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             if (mailId != null && !mailId.isBlank()) meta.getPersistentDataContainer().set(keyMailId, PersistentDataType.STRING, mailId);
@@ -1966,6 +2017,33 @@ items:
         mailData.set(mailPath(player.getUniqueId(), "letters." + id), null);
         saveMailData();
         msg(player, "mail-deleted");
+    }
+
+    private void deleteMailInternal(UUID owner, String id) {
+        if (owner == null || id == null || id.isBlank()) return;
+        mailData.set(mailPath(owner, "letters." + id), null);
+        saveMailData();
+    }
+
+    private void handleClanInviteMailAction(Player player, String id, boolean accept, int page) {
+        if (id == null || id.isBlank() || !mailData.contains(mailPath(player.getUniqueId(), "letters." + id))) {
+            msg(player, "mail-not-found");
+            openMailbox(player, page);
+            return;
+        }
+        String base = mailPath(player.getUniqueId(), "letters." + id);
+        String type = mailData.getString(base + ".type", "");
+        String clanTag = mailData.getString(base + ".clan-tag", "");
+        if (!"MDVCLANS_INVITE".equalsIgnoreCase(type) || clanTag == null || clanTag.isBlank()) {
+            msg(player, "mail-not-found");
+            openMailbox(player, page);
+            return;
+        }
+        player.closeInventory();
+        Bukkit.getScheduler().runTask(this, () -> {
+            Bukkit.dispatchCommand(player, accept ? "clan aceptar " + clanTag : "clan rechazar " + clanTag);
+            deleteMailInternal(player.getUniqueId(), id);
+        });
     }
 
     private boolean blockMailSender(Player player, String senderUuidText) {
@@ -2686,6 +2764,14 @@ items:
             case "BLOCK_MAIL_SENDER" -> {
                 String senderUuid = pdc.get(keyMailSender, PersistentDataType.STRING);
                 if (blockMailSender(player, senderUuid)) player.closeInventory();
+            }
+            case "ACCEPT_CLAN_INVITE" -> {
+                String mailId = pdc.get(keyMailId, PersistentDataType.STRING);
+                handleClanInviteMailAction(player, mailId, true, holder.page);
+            }
+            case "REJECT_CLAN_INVITE" -> {
+                String mailId = pdc.get(keyMailId, PersistentDataType.STRING);
+                handleClanInviteMailAction(player, mailId, false, holder.page);
             }
             case "COMMANDS" -> runConfiguredCommands(player, pdc.get(keyMenu, PersistentDataType.STRING));
             default -> { }
