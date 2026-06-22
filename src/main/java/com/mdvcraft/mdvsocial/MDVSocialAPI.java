@@ -46,7 +46,12 @@ public final class MDVSocialAPI {
     }
     public static boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, long expiresAt) {
         MDVSocialPlugin plugin = plugin();
-        return plugin != null && plugin.sendClanInviteMail(targetUuid, targetName, inviterUuid, fromName, clanTag, clanName, message, expiresAt);
+        return plugin != null && plugin.sendClanInviteMail(targetUuid, targetName, inviterUuid, fromName, clanTag, clanName, message, "", expiresAt);
+    }
+
+    public static boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, String clanBannerData, long expiresAt) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin != null && plugin.sendClanInviteMail(targetUuid, targetName, inviterUuid, fromName, clanTag, clanName, message, clanBannerData, expiresAt);
     }
 
 }

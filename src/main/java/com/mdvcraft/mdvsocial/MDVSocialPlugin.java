@@ -27,6 +27,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -36,7 +37,9 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.profile.PlayerTextures;
+import org.bukkit.util.io.BukkitObjectInputStream;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -1218,7 +1221,8 @@ items:
                     sec.getString("condition-equals", sec.getString("equals", "true")),
                     normalize(sec.getString("true-menu", sec.getString("menu-true", ""))),
                     normalize(sec.getString("false-menu", sec.getString("menu-false", ""))),
-                    normalize(sec.getString("clans-menu", sec.getString("mdvclans-menu", target)))
+                    normalize(sec.getString("clans-menu", sec.getString("mdvclans-menu", target))),
+                    sec.getBoolean("use-clan-banner", sec.getBoolean("dynamic-clan-banner", false))
             );
             items.add(item);
         }
@@ -1279,13 +1283,19 @@ items:
     }
 
     private ItemStack customMenuItemStack(Player player, CustomMenuItem def, UUID targetUuid, String targetName, boolean targetOnline) {
+        String clanBannerData = def.useClanBanner ? getPlayerClanBannerData(player.getUniqueId()) : null;
+        boolean usingClanBanner = def.useClanBanner && clanBannerData != null;
         Material mat = Material.matchMaterial(def.material.toUpperCase(Locale.ROOT));
         if (mat == null) mat = Material.PAPER;
         int amount = Math.max(1, Math.min(64, def.amount));
-        ItemStack item = new ItemStack(mat, amount);
+        ItemStack item = usingClanBanner ? bannerFromSerializedData(clanBannerData) : new ItemStack(mat, amount);
+        item.setAmount(amount);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
-        if (mat == Material.PLAYER_HEAD && meta instanceof SkullMeta skull) {
+        if (usingClanBanner) {
+            hideBannerTooltip(meta);
+        }
+        if (!usingClanBanner && mat == Material.PLAYER_HEAD && meta instanceof SkullMeta skull) {
             String texture = applyTargetPlaceholders(def.texture, player, targetUuid, targetName, targetOnline);
             if (texture != null && !texture.isBlank()) {
                 applySkullTexture(skull, texture);
@@ -1376,6 +1386,46 @@ items:
             skull.setOwnerProfile(profile);
         } catch (Throwable ex) {
             getLogger().warning("No se pudo aplicar textura custom de cabeza con API publica: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
+        }
+    }
+
+    private String getPlayerClanBannerData(UUID playerUuid) {
+        if (playerUuid == null) return null;
+        try {
+            org.bukkit.plugin.Plugin clans = Bukkit.getPluginManager().getPlugin("MDVClans");
+            if (clans == null || !clans.isEnabled()) return null;
+            Method method = clans.getClass().getMethod("getPlayerClanBannerData", UUID.class);
+            Object result = method.invoke(clans, playerUuid);
+            return result == null ? null : String.valueOf(result);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private ItemStack bannerFromSerializedData(String data) {
+        if (data != null && !data.isBlank()) {
+            try {
+                return itemStackFromBase64(data);
+            } catch (Throwable ignored) {
+                return new ItemStack(Material.WHITE_BANNER);
+            }
+        }
+        return new ItemStack(Material.WHITE_BANNER);
+    }
+
+    private ItemStack itemStackFromBase64(String data) throws IOException, ClassNotFoundException {
+        try (BukkitObjectInputStream dataInput = new BukkitObjectInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(data)))) {
+            Object object = dataInput.readObject();
+            return object instanceof ItemStack stack ? stack : new ItemStack(Material.WHITE_BANNER);
+        }
+    }
+
+    private void hideBannerTooltip(ItemMeta meta) {
+        if (meta == null) return;
+        try {
+            meta.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+        } catch (Throwable ignored) {
+            // Compatibilidad con builds donde el flag no exista.
         }
     }
 
@@ -1743,6 +1793,10 @@ items:
     }
 
     public boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, long expiresAt) {
+        return sendClanInviteMail(targetUuid, targetName, inviterUuid, fromName, clanTag, clanName, message, "", expiresAt);
+    }
+
+    public boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, String clanBannerData, long expiresAt) {
         if (!mailEnabled() || targetUuid == null || clanTag == null || clanTag.isBlank()) return false;
         String clean = sanitizeMailMessage(message);
         if (clean.isBlank()) clean = "El clan " + clanName + " [" + clanTag + "] te invitó a unirte.";
@@ -1757,11 +1811,13 @@ items:
             if (count >= limit) return false;
         }
 
-        String id = storeMail(targetUuid, targetName == null || targetName.isBlank() ? "jugador" : targetName, inviterUuid == null ? "" : inviterUuid.toString(), fromName == null || fromName.isBlank() ? "MDVClans" : fromName, clean, expiresAt);
+        String senderName = fromName == null || fromName.isBlank() ? "MDVClans" : fromName;
+        String id = storeMail(targetUuid, targetName == null || targetName.isBlank() ? "jugador" : targetName, inviterUuid == null ? "" : inviterUuid.toString(), senderName, clean, expiresAt);
         String base = mailPath(targetUuid, "letters." + id);
         mailData.set(base + ".type", "MDVCLANS_INVITE");
         mailData.set(base + ".clan-tag", clanTag);
         mailData.set(base + ".clan-name", clanName == null || clanName.isBlank() ? clanTag : clanName);
+        mailData.set(base + ".clan-banner", clanBannerData == null ? "" : clanBannerData);
         mailData.set(base + ".inviter-uuid", inviterUuid == null ? "" : inviterUuid.toString());
         saveMailData();
         return true;
@@ -1897,28 +1953,37 @@ items:
         boolean read = mailData.getBoolean(base + ".read", false);
         long sentAt = mailData.getLong(base + ".sent-at", 0L);
         long expiresAt = mailData.getLong(base + ".expires-at", 0L);
+        boolean clanInviteMail = "MDVCLANS_INVITE".equalsIgnoreCase(mailData.getString(base + ".type", ""));
+        String clanBannerData = mailData.getString(base + ".clan-banner", "");
 
-        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-        SkullMeta skull = (SkullMeta) item.getItemMeta();
-        try {
-            if (!fromUuidText.isBlank()) skull.setOwningPlayer(Bukkit.getOfflinePlayer(UUID.fromString(fromUuidText)));
-            else skull.setOwningPlayer(Bukkit.getOfflinePlayer(fromName));
-        } catch (Throwable ignored) {
-            skull.setOwningPlayer(Bukkit.getOfflinePlayer(fromName));
+        ItemStack item = clanInviteMail ? bannerFromSerializedData(clanBannerData) : new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+        if (clanInviteMail) {
+            hideBannerTooltip(meta);
+        } else if (meta instanceof SkullMeta skull) {
+            try {
+                if (!fromUuidText.isBlank()) skull.setOwningPlayer(Bukkit.getOfflinePlayer(UUID.fromString(fromUuidText)));
+                else skull.setOwningPlayer(Bukkit.getOfflinePlayer(fromName));
+            } catch (Throwable ignored) {
+                skull.setOwningPlayer(Bukkit.getOfflinePlayer(fromName));
+            }
+            meta = skull;
         }
-        skull.setDisplayName(color((read ? "&eCarta de &f" : "&aNueva carta de &f") + fromName));
+        meta.setDisplayName(color((read ? "&eCarta de &f" : "&aNueva carta de &f") + fromName));
         List<String> lore = new ArrayList<>();
         lore.add(color(""));
+        if (clanInviteMail) lore.add(color("&7Tipo: &dInvitación de clan"));
         lore.add(color("&7Enviada: &e" + formatTime(sentAt)));
         lore.add(color("&7Expira: &c" + daysLeftText(expiresAt)));
         lore.add(color(""));
         lore.add(color("&8\"" + shorten(message, 34) + "\""));
         lore.add(color(""));
         lore.add(color("&eClick para leer."));
-        skull.setLore(lore);
-        skull.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, "READ_MAIL");
-        skull.getPersistentDataContainer().set(keyMailId, PersistentDataType.STRING, id);
-        item.setItemMeta(skull);
+        meta.setLore(lore);
+        meta.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, "READ_MAIL");
+        meta.getPersistentDataContainer().set(keyMailId, PersistentDataType.STRING, id);
+        item.setItemMeta(meta);
         return item;
     }
 
@@ -1936,6 +2001,7 @@ items:
         String message = mailData.getString(base + ".message", "");
         String mailType = mailData.getString(base + ".type", "");
         boolean clanInviteMail = "MDVCLANS_INVITE".equalsIgnoreCase(mailType);
+        String clanBannerData = mailData.getString(base + ".clan-banner", "");
         long sentAt = mailData.getLong(base + ".sent-at", 0L);
         long expiresAt = mailData.getLong(base + ".expires-at", 0L);
 
@@ -1946,24 +2012,27 @@ items:
         holder.inventory = inv;
         fill(inv);
 
-        ItemStack letter = new ItemStack(Material.WRITTEN_BOOK);
+        ItemStack letter = clanInviteMail ? bannerFromSerializedData(clanBannerData) : new ItemStack(Material.WRITTEN_BOOK);
         ItemMeta meta = letter.getItemMeta();
-        meta.setDisplayName(color("&e&lCarta de &f" + fromName));
-        List<String> lore = new ArrayList<>();
-        lore.add(color(""));
-        lore.add(color("&7Enviada: &e" + formatTime(sentAt)));
-        lore.add(color("&7Expira: &c" + daysLeftText(expiresAt)));
-        lore.add(color(""));
-        for (String line : wrapText(message, 38)) lore.add(color("&f" + line));
-        meta.setLore(lore);
-        letter.setItemMeta(meta);
+        if (meta != null) {
+            if (clanInviteMail) hideBannerTooltip(meta);
+            meta.setDisplayName(color((clanInviteMail ? "&d&lInvitación de clan de &f" : "&e&lCarta de &f") + fromName));
+            List<String> lore = new ArrayList<>();
+            lore.add(color(""));
+            if (clanInviteMail) lore.add(color("&7Tipo: &dInvitación de clan"));
+            lore.add(color("&7Enviada: &e" + formatTime(sentAt)));
+            lore.add(color("&7Expira: &c" + daysLeftText(expiresAt)));
+            lore.add(color(""));
+            for (String line : wrapText(message, 38)) lore.add(color("&f" + line));
+            meta.setLore(lore);
+            letter.setItemMeta(meta);
+        }
         inv.setItem(getConfig().getInt("mail.menus.read.letter-slot", 13), letter);
 
         inv.setItem(getConfig().getInt("mail.menus.read.back-slot", 11), mailActionItem("items.back", "MAIL_BACK", id, fromUuid));
         if (clanInviteMail) {
             inv.setItem(getConfig().getInt("mail.menus.read.reply-slot", 14), mailActionItem("mail.items.clan-invite-accept", "ACCEPT_CLAN_INVITE", id, fromUuid, Material.LIME_DYE, "&a&lAceptar invitación", List.of("", "&7Acepta la invitación", "&7y entra al clan si hay cupo.", "", "&eClick para aceptar.")));
             inv.setItem(getConfig().getInt("mail.menus.read.delete-slot", 15), mailActionItem("mail.items.clan-invite-reject", "REJECT_CLAN_INVITE", id, fromUuid, Material.RED_DYE, "&c&lRechazar invitación", List.of("", "&7Rechaza la invitación", "&7y elimina esta carta.", "", "&eClick para rechazar.")));
-            inv.setItem(getConfig().getInt("mail.menus.read.block-slot", 16), mailActionItem("mail.items.delete", "DELETE_MAIL", id, fromUuid));
         } else {
             inv.setItem(getConfig().getInt("mail.menus.read.reply-slot", 14), mailActionItem("mail.items.reply", "REPLY_MAIL", id, fromUuid));
             inv.setItem(getConfig().getInt("mail.menus.read.delete-slot", 15), mailActionItem("mail.items.delete", "DELETE_MAIL", id, fromUuid));
@@ -3480,8 +3549,9 @@ items:
         final String trueMenu;
         final String falseMenu;
         final String clansMenu;
+        final boolean useClanBanner;
 
-        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen, String conditionPlaceholder, String conditionEquals, String trueMenu, String falseMenu, String clansMenu) {
+        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen, String conditionPlaceholder, String conditionEquals, String trueMenu, String falseMenu, String clansMenu, boolean useClanBanner) {
             this.id = id;
             this.slot = slot;
             this.material = material == null ? "PAPER" : material;
@@ -3500,6 +3570,7 @@ items:
             this.trueMenu = trueMenu == null ? "" : trueMenu;
             this.falseMenu = falseMenu == null ? "" : falseMenu;
             this.clansMenu = clansMenu == null ? "" : clansMenu;
+            this.useClanBanner = useClanBanner;
         }
 
         boolean isVisible(UUID targetUuid, boolean targetOnline) {

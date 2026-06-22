@@ -16,11 +16,12 @@ items:
 
   clan:
     slot: 13
-    material: SHIELD
+    material: GREEN_BANNER
+    use-clan-banner: true
     name: '&aClan'
     lore:
       - '&7Abre el menu de clan.'
-      - '&8Detecta si tienes clan o no.'
+      - '&8Si tienes clan, muestra su banner.'
       - '&eClick para abrir.'
     action: OPEN_CONDITIONAL_MENU
     condition-placeholder: '%mdvclans_is_in_clan%'
