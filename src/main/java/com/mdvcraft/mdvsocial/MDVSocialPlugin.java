@@ -80,6 +80,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private YamlConfiguration mailData;
     private Economy economy;
     private SocialMenuItemManager socialMenuItemManager;
+    private PlayerHomesMenuManager playerHomesMenuManager;
 
     private org.bukkit.NamespacedKey keyAction;
     private org.bukkit.NamespacedKey keyTitle;
@@ -148,14 +149,19 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 
         socialMenuItemManager = new SocialMenuItemManager(this);
         socialMenuItemManager.enable();
+        playerHomesMenuManager = new PlayerHomesMenuManager(this);
+        playerHomesMenuManager.enable();
 
-        getLogger().info("MDVSocial 1.2.11 habilitado.");
+        getLogger().info("MDVSocial 1.2.12 habilitado.");
     }
 
     @Override
     public void onDisable() {
         if (socialMenuItemManager != null) {
             socialMenuItemManager.disable();
+        }
+        if (playerHomesMenuManager != null) {
+            playerHomesMenuManager.disable();
         }
         resetAllScoreboardPartyPermissions();
         for (PermissionAttachment attachment : scoreboardPartyAttachments.values()) {
@@ -374,6 +380,9 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             setupEconomy();
             if (socialMenuItemManager != null) {
                 socialMenuItemManager.reload();
+            }
+            if (playerHomesMenuManager != null) {
+                playerHomesMenuManager.reload();
             }
             msg(sender, "reloaded");
             return true;

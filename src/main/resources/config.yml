@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.2.11
+# MDVSocial 1.2.12
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -148,6 +148,159 @@ social-menu-item:
     - '&eClick derecho &7para abrir el menu social.'
   glowing: true
   custom-model-data: 0
+
+
+# ==========================================================
+# Menu de casas personales
+#
+# Usa Essentials como backend real:
+# - Click en una casa: ejecuta /home <home>
+# - Click izquierdo en establecer: ejecuta /sethome <home>
+# - Click derecho o shift derecho en establecer: ejecuta /delhome <home>
+#
+# El menu lee las homes reales desde plugins/Essentials/userdata/<uuid>.yml.
+# Si un jugador creó /sethome mina o /sethome casacaca, aparecerá con ese nombre.
+# ==========================================================
+homes-menu:
+  enabled: true
+  use-permission: 'mdvsocial.homes.use'
+  title: '&8Casas &8- &6&l{player}'
+  size: 54
+  max-visible-homes: 4
+  default-home-name-format: 'casa{number}'
+  essentials-userdata-path: 'plugins/Essentials/userdata'
+  sort-homes-by-name: false
+  close-on-action: true
+
+  # Límite visual de casas para el menú.
+  # IMPORTANTE: esto debe acompañarse con permisos/límites de Essentials.
+  # Ejemplo: si das mdvsocial.homes.2, también da el permiso/límite equivalente en Essentials.
+  max-homes:
+    default: 1
+    permission-limits:
+      - permission: 'mdvsocial.homes.2'
+        homes: 2
+      - permission: 'mdvsocial.homes.3'
+        homes: 3
+      - permission: 'mdvsocial.homes.4'
+        homes: 4
+
+  commands:
+    teleport: 'home {home_name}'
+    set: 'sethome {home_name}'
+    delete: 'delhome {home_name}'
+
+  status-text:
+    established: '&aEstablecida'
+    missing: '&cNo establecida'
+    locked: '&cBloqueada'
+
+  messages:
+    disabled: '&cEl menu de casas esta desactivado.'
+    no-permission: '&cNo tienes permiso para usar el menu de casas.'
+    only-players: '&cSolo jugadores.'
+    home-not-set: '&cEse hogar aun no esta establecido.'
+
+  items:
+    filler:
+      enabled: true
+      material: GRAY_STAINED_GLASS_PANE
+      name: ' '
+      lore: []
+
+    info:
+      slot: 13
+      material: LODESTONE
+      name: '&6&lCasas personales'
+      lore:
+        - ''
+        - '&5&l● &7&lInformación de Hogares'
+        - '&7Casas establecidas: &e{homes}&7/&e{max_homes}'
+        - '&7Espacios visibles: &e{max_visible_homes}'
+        - ''
+        - '&8Tus casas usan el sistema'
+        - '&8real de homes de Essentials.'
+
+  teleport:
+    slot-1: 10
+    slot-2: 19
+    slot-3: 28
+    slot-4: 37
+
+    available:
+      material: ENDER_PEARL
+      name: '&5&lIr a {home_name}'
+      lore:
+        - ''
+        - '&5&l● &7&lInformación'
+        - '&7Estado: {home_status}'
+        - '&7Mundo: &e{home_world}'
+        - '&7Coordenadas: &e{home_x}&7, &e{home_y}&7, &e{home_z}'
+        - ''
+        - '&eClick para teletransportarte.'
+
+    missing:
+      material: GRAY_DYE
+      name: '&7&lHogar {home_number}'
+      lore:
+        - ''
+        - '&7Estado: &cNo establecido'
+        - '&7Nombre reservado: &e{home_name}'
+        - ''
+        - '&8Usa el botón de la derecha'
+        - '&8para guardar tu ubicación.'
+
+    locked:
+      material: BARRIER
+      name: '&8&lHogar {home_number} bloqueado'
+      lore:
+        - ''
+        - '&7Estado: &cBloqueado por límite'
+        - '&7Tus casas: &e{homes}&7/&e{max_homes}'
+        - ''
+        - '&8Aumenta tu rango o compra'
+        - '&8una ampliación de hogares.'
+
+  set:
+    slot-1: 16
+    slot-2: 25
+    slot-3: 34
+    slot-4: 43
+
+    available:
+      material: COMPASS
+      name: '&6&lEstablecer {home_name}'
+      lore:
+        - ''
+        - '&7Guarda tu ubicación actual'
+        - '&7como hogar &e{home_name}&7.'
+        - ''
+        - '&7Estado actual: {home_status}'
+        - '&7Ubicación actual: &e{current_x}&7, &e{current_y}&7, &e{current_z}'
+        - ''
+        - '&eClick izquierdo &7para establecer/actualizar.'
+        - '&cClick derecho &7para eliminar si existe.'
+
+    locked:
+      material: BARRIER
+      name: '&8&lEstablecer Hogar {home_number}'
+      lore:
+        - ''
+        - '&7Estado: &cBloqueado por límite'
+        - '&7Tus casas: &e{homes}&7/&e{max_homes}'
+        - ''
+        - '&8Todavía no puedes fijar'
+        - '&8más hogares personales.'
+
+  back:
+    enabled: true
+    slot: 49
+    command: 'social'
+    material: PLAYER_HEAD
+    texture: 'eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmQ2OWUwNmU1ZGFkZmQ4NGU1ZjNkMWMyMTA2M2YyNTUzYjJmYTk0NWVlMWQ0ZDcxNTJmZGM1NDI1YmMxMmE5In19fQ=='
+    name: '&6&lVolver'
+    lore:
+      - '&7Regresa al menú social.'
 
 # ==========================================================
 # Permiso temporal para scoreboard de party

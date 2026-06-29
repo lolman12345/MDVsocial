@@ -1,5 +1,5 @@
 name: MDVSocial
-version: 1.2.11
+version: 1.2.12
 main: com.mdvcraft.mdvsocial.MDVSocialPlugin
 api-version: '1.21'
 author: MDVCRAFT
@@ -24,6 +24,10 @@ commands:
     description: Envia y administra cartas de MDVSocial.
     usage: /carta
     aliases: [cartas]
+  casa:
+    description: Abre el menu de casas personales.
+    usage: /casa
+    aliases: [casas, hogar, hogares]
 permissions:
   mdvsocial.use:
     description: Permite usar /social y /titulos.
@@ -43,4 +47,8 @@ permissions:
     default: true
   mdvsocial.mail.delete:
     description: Permite eliminar cartas propias.
+    default: true
+
+  mdvsocial.homes.use:
+    description: Permite usar el menu de casas personales.
     default: true

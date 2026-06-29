@@ -1,0 +1,44 @@
+MDVSocial 1.2.12 - Menu de Casas Personales
+===========================================
+
+Cambios principales:
+- Agregado menu /casa y /casas para hogares personales.
+- Usa Essentials como backend real: /home, /sethome y /delhome.
+- Lee las homes reales desde plugins/Essentials/userdata/<uuid>.yml.
+- Si un jugador creó /sethome mina o /sethome casacaca, el menu lo muestra con ese nombre.
+- Diseño configurable similar al menu de bases de clan:
+  - item central de informacion,
+  - fila izquierda para teletransportarse,
+  - fila derecha para establecer/actualizar/eliminar.
+- Click en una home izquierda: ejecuta /home <home> como jugador.
+- Click izquierdo en el item derecho: ejecuta /sethome <home> como jugador.
+- Click derecho o shift derecho en el item derecho: ejecuta /delhome <home> como jugador.
+- Limite visual por permisos desde homes-menu.max-homes.permission-limits.
+
+Archivos modificados:
+- pom.xml: version 1.2.12
+- src/main/resources/plugin.yml: version 1.2.12 + comando /casa
+- src/main/resources/config.yml: agregado homes-menu
+- src/main/java/com/mdvcraft/mdvsocial/MDVSocialPlugin.java: inicializa y recarga PlayerHomesMenuManager
+
+Archivo nuevo:
+- src/main/java/com/mdvcraft/mdvsocial/PlayerHomesMenuManager.java
+
+Para actualizar un servidor existente:
+1. No borres plugins/MDVSocial/.
+2. Compila el JAR con Maven desde GitHub.
+3. Apaga el servidor.
+4. Reemplaza solo el JAR viejo por el nuevo.
+5. Agrega manualmente el bloque homes-menu a tu config.yml actual.
+6. Si usas permisos para mas casas, sincroniza tambien el limite real de Essentials.
+7. Enciende el servidor.
+
+Permisos nuevos:
+- mdvsocial.homes.use: permite usar /casa.
+- mdvsocial.homes.2: ejemplo de ampliacion visual a 2 casas.
+- mdvsocial.homes.3: ejemplo de ampliacion visual a 3 casas.
+- mdvsocial.homes.4: ejemplo de ampliacion visual a 4 casas.
+
+Importante:
+MDVSocial no reemplaza a Essentials. Solo abre un menu bonito y ejecuta comandos como jugador.
+Essentials sigue controlando cooldowns, teleports, nombres, permisos y limites reales.
