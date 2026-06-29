@@ -1,0 +1,13 @@
+MDVSocial 1.2.13 - Fix menu de casas
+=====================================
+
+Arreglo principal:
+- Corregidas las rutas internas del menu de casas para que lea los items desde homes-menu.items.*.
+- En 1.2.12 el item central leia bien homes-menu.items.info, pero teleport/set/back buscaban rutas antiguas como homes-menu.teleport.*, por eso aparecian como PAPER.
+
+Para actualizar:
+1. Compila este source en GitHub/Maven.
+2. Reemplaza solo el JAR.
+3. No borres plugins/MDVSocial/.
+4. Mantén tu bloque homes-menu actual con items dentro de homes-menu.items.
+5. Ejecuta /mdvsocial reload o reinicia.

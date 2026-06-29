@@ -149,30 +149,30 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         for (int i = 1; i <= maxVisibleHomes; i++) {
             HomeData home = i <= homes.size() ? homes.get(i - 1) : null;
             boolean unlocked = i <= maxHomes;
-            int teleportSlot = slot("teleport.slot-" + i, defaultTeleportSlot(i));
-            int setSlot = slot("set.slot-" + i, defaultSetSlot(i));
+            int teleportSlot = slot("items.teleport.slot-" + i, defaultTeleportSlot(i));
+            int setSlot = slot("items.set.slot-" + i, defaultSetSlot(i));
 
             if (!unlocked) {
-                inv.setItem(teleportSlot, itemFromPath("teleport.locked", "LOCKED", null, i, player, homes, maxHomes));
-                inv.setItem(setSlot, itemFromPath("set.locked", "LOCKED", null, i, player, homes, maxHomes));
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.locked", "LOCKED", null, i, player, homes, maxHomes));
+                inv.setItem(setSlot, itemFromPath("items.set.locked", "LOCKED", null, i, player, homes, maxHomes));
                 continue;
             }
 
             if (home == null) {
                 String generatedName = generateHomeName(i);
-                inv.setItem(teleportSlot, itemFromPath("teleport.missing", "MISSING", HomeData.missing(generatedName), i, player, homes, maxHomes));
-                inv.setItem(setSlot, itemFromPath("set.available", "SET_HOME", HomeData.missing(generatedName), i, player, homes, maxHomes));
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.missing", "MISSING", HomeData.missing(generatedName), i, player, homes, maxHomes));
+                inv.setItem(setSlot, itemFromPath("items.set.available", "SET_HOME", HomeData.missing(generatedName), i, player, homes, maxHomes));
             } else {
-                inv.setItem(teleportSlot, itemFromPath("teleport.available", "TELEPORT_HOME", home, i, player, homes, maxHomes));
-                inv.setItem(setSlot, itemFromPath("set.available", "SET_HOME", home, i, player, homes, maxHomes));
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.available", "TELEPORT_HOME", home, i, player, homes, maxHomes));
+                inv.setItem(setSlot, itemFromPath("items.set.available", "SET_HOME", home, i, player, homes, maxHomes));
             }
         }
 
-        ConfigurationSection back = section("back");
+        ConfigurationSection back = section("items.back");
         if (back == null || back.getBoolean("enabled", true)) {
-            int backSlot = slot("back.slot", Math.min(size - 5, 49));
+            int backSlot = slot("items.back.slot", Math.min(size - 5, 49));
             if (backSlot >= 0 && backSlot < size) {
-                inv.setItem(backSlot, itemFromPath("back", "BACK", null, 0, player, homes, maxHomes));
+                inv.setItem(backSlot, itemFromPath("items.back", "BACK", null, 0, player, homes, maxHomes));
             }
         }
 
@@ -211,7 +211,7 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
             }
             case "BACK" -> {
                 if (closeOnAction) player.closeInventory();
-                String command = normalizeCommand(sectionString("back.command", "social"));
+                String command = normalizeCommand(sectionString("items.back.command", "social"));
                 Bukkit.getScheduler().runTask(plugin, () -> Bukkit.dispatchCommand(player, command));
             }
             default -> { }
