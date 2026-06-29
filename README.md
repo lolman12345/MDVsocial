@@ -1,4 +1,6 @@
-# MDVSocial 1.2.8
+# MDVSocial 1.2.11
+
+Actualización 1.2.11: añade el item fijo del menú social en el slot 8 de la hotbar, configurable desde `social-menu-item`.
 
 Plugin social modular para MDVCRAFT.
 
@@ -171,7 +173,7 @@ clans-menu: miembros
 - `Menus/clan_con_clan.yml`: el item Tablero de información muestra placeholders de MDVClans y ejecuta `/clan tablero ver` al hacer click.
 
 
-## MDVSocial 1.2.8
+## MDVSocial 1.2.11
 
 Agrega MDVSocial como proveedor reutilizable de títulos para otros plugins.
 

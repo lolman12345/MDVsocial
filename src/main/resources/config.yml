@@ -1,5 +1,5 @@
 # ==========================================================
-# MDVSocial 1.2.8
+# MDVSocial 1.2.11
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
 # ==========================================================
 
@@ -118,6 +118,36 @@ settings:
   # Si un jugador tiene un titulo activo pero ya no cumple permiso/requisito,
   # el placeholder no lo mostrara.
   hide-invalid-active-title: true
+
+
+# ==========================================================
+# Item fijo del menu social
+#
+# Slot 8 = noveno slot visible de la hotbar.
+# Si enabled esta true, el item queda bloqueado en ese slot:
+# no se puede mover, dropear, transferir, meter en cofres,
+# poner en otras UIs ni perder al morir.
+#
+# Si el slot esta ocupado al activarlo, el item anterior se dropea
+# al suelo y se coloca el Sello del Viajero.
+# ==========================================================
+social-menu-item:
+  enabled: true
+  slot: 8
+  command: social
+  check-interval-seconds: 5
+  drop-replaced-item: true
+  remove-extra-copies: true
+  remove-when-disabled: false
+  material: COMPASS
+  name: '&6&lSello del Viajero'
+  lore:
+    - '&7Un sello entregado a todo forastero'
+    - '&7que llega a las tierras de MDVCRAFT.'
+    - ''
+    - '&eClick derecho &7para abrir el menu social.'
+  glowing: true
+  custom-model-data: 0
 
 # ==========================================================
 # Permiso temporal para scoreboard de party
