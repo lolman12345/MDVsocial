@@ -1,4 +1,4 @@
-# MDVSocial 1.2.12
+# MDVSocial 1.2.14
 
 Actualización 1.2.11: añade el item fijo del menú social en el slot 8 de la hotbar, configurable desde `social-menu-item`.
 
@@ -101,6 +101,17 @@ Datos:
 Las cartas expiran automáticamente según `mail.expire-after-days`.
 
 
+
+## MDVSocial 1.2.14
+
+Corrige el menú de casas personales:
+
+- `{home_display}` ahora se reemplaza correctamente.
+- `{x}`, `{y}`, `{z}` funcionan como ubicación actual del jugador.
+- Los botones de casas vacías usan `homes-menu.items.set.missing` cuando existe.
+- El menú acepta configs con `homes-menu.items.teleport` y también el formato antiguo `homes-menu.teleport`.
+- El filler del menú puede desactivarse para dejar slots vacíos.
+
 ## MDVSocial 1.2.5
 
 Agrega sincronizacion automatica para AnimatedScoreboard cuando el jugador esta en party de MMOCore.
@@ -173,7 +184,7 @@ clans-menu: miembros
 - `Menus/clan_con_clan.yml`: el item Tablero de información muestra placeholders de MDVClans y ejecuta `/clan tablero ver` al hacer click.
 
 
-## MDVSocial 1.2.12
+## MDVSocial 1.2.14
 
 Agrega MDVSocial como proveedor reutilizable de títulos para otros plugins.
 

@@ -152,7 +152,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         playerHomesMenuManager = new PlayerHomesMenuManager(this);
         playerHomesMenuManager.enable();
 
-        getLogger().info("MDVSocial 1.2.12 habilitado.");
+        getLogger().info("MDVSocial 1.2.14 habilitado.");
     }
 
     @Override

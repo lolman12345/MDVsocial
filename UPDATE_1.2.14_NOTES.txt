@@ -1,0 +1,33 @@
+MDVSocial 1.2.14 - Correcciones del menú de casas
+===================================================
+
+Cambios principales:
+- Corregido placeholder {home_display} en nombres/lore de casas.
+- Agregados alias de ubicación actual: {x}, {y}, {z} además de {current_x}, {current_y}, {current_z}.
+- El botón de establecer una casa vacía usa homes-menu.items.set.missing si existe.
+- Compatibilidad con dos formatos de config:
+  - homes-menu.items.teleport.available
+  - homes-menu.teleport.available
+- Config base corregida para que teleport/set/back estén dentro de homes-menu.items.
+- Agregado filler editable; por defecto queda disabled para que los slots no usados queden vacíos.
+
+Para actualizar:
+1. Compila el JAR con Maven/GitHub.
+2. Apaga el servidor.
+3. Reemplaza solo el JAR viejo.
+4. No borres plugins/MDVSocial/.
+5. En config.yml, agrega dentro de homes-menu.items el bloque filler si quieres controlar los espacios vacíos.
+6. Reinicia o usa /mdvsocial reload.
+
+Bloque recomendado para slots vacíos:
+
+homes-menu:
+  items:
+    filler:
+      enabled: false
+      material: BLACK_STAINED_GLASS_PANE
+      name: ' '
+      lore: []
+
+Con enabled: false los slots no usados quedan vacíos.
+Con enabled: true se rellenan con el material indicado.

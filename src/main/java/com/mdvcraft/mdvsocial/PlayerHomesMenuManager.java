@@ -160,8 +160,10 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
 
             if (home == null) {
                 String generatedName = generateHomeName(i);
-                inv.setItem(teleportSlot, itemFromPath("items.teleport.missing", "MISSING", HomeData.missing(generatedName), i, player, homes, maxHomes));
-                inv.setItem(setSlot, itemFromPath("items.set.available", "SET_HOME", HomeData.missing(generatedName), i, player, homes, maxHomes));
+                HomeData missingHome = HomeData.missing(generatedName);
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.missing", "MISSING", missingHome, i, player, homes, maxHomes));
+                String setMissingPath = section("items.set.missing") != null || section("set.missing") != null ? "items.set.missing" : "items.set.available";
+                inv.setItem(setSlot, itemFromPath(setMissingPath, "SET_HOME", missingHome, i, player, homes, maxHomes));
             } else {
                 inv.setItem(teleportSlot, itemFromPath("items.teleport.available", "TELEPORT_HOME", home, i, player, homes, maxHomes));
                 inv.setItem(setSlot, itemFromPath("items.set.available", "SET_HOME", home, i, player, homes, maxHomes));
@@ -387,6 +389,7 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         return applyGlobalPlaceholders(input, player, homes, maxHomes)
                 .replace("{home_number}", String.valueOf(number))
                 .replace("{home_name}", home.name)
+                .replace("{home_display}", home.name)
                 .replace("{home}", home.name)
                 .replace("{home_status}", home.exists ? color(sectionString("status-text.established", "&aEstablecida")) : color(sectionString("status-text.missing", "&cNo establecida")))
                 .replace("{home_world}", home.world)
@@ -396,7 +399,11 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
                 .replace("{current_world}", currentWorld)
                 .replace("{current_x}", String.valueOf(currentX))
                 .replace("{current_y}", String.valueOf(currentY))
-                .replace("{current_z}", String.valueOf(currentZ));
+                .replace("{current_z}", String.valueOf(currentZ))
+                .replace("{world}", currentWorld)
+                .replace("{x}", String.valueOf(currentX))
+                .replace("{y}", String.valueOf(currentY))
+                .replace("{z}", String.valueOf(currentZ));
     }
 
     private void fill(Inventory inv, Player player, List<HomeData> homes, int maxHomes) {
@@ -427,11 +434,23 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     }
 
     private ConfigurationSection section(String relativePath) {
-        return plugin.getConfig().getConfigurationSection(CONFIG_PATH + "." + relativePath);
+        ConfigurationSection sec = plugin.getConfig().getConfigurationSection(CONFIG_PATH + "." + relativePath);
+        if (sec != null) return sec;
+        // Compatibilidad: algunas configs antiguas dejaron teleport/set/back fuera de items.
+        if (relativePath != null && relativePath.startsWith("items.")) {
+            return plugin.getConfig().getConfigurationSection(CONFIG_PATH + "." + relativePath.substring("items.".length()));
+        }
+        return null;
     }
 
     private String sectionString(String relativePath, String def) {
-        return plugin.getConfig().getString(CONFIG_PATH + "." + relativePath, def);
+        String value = plugin.getConfig().getString(CONFIG_PATH + "." + relativePath, null);
+        if (value != null) return value;
+        if (relativePath != null && relativePath.startsWith("items.")) {
+            value = plugin.getConfig().getString(CONFIG_PATH + "." + relativePath.substring("items.".length()), null);
+            if (value != null) return value;
+        }
+        return def;
     }
 
     private String normalizeCommand(String raw) {
