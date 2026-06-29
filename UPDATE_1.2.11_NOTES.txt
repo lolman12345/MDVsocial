@@ -1,0 +1,48 @@
+MDVSocial 1.2.11 - Sello del Viajero
+======================================
+
+Cambios principales:
+- Agregado item fijo del menu social en la hotbar.
+- Configurable desde config.yml en el bloque social-menu-item.
+- Slot por defecto: 8 tecnico, noveno slot visible de la hotbar.
+- Click derecho ejecuta /social como jugador.
+- El item queda bloqueado: no se puede mover, dropear, transferir a cofres/UIs, poner en offhand ni perder al morir.
+- Si el slot 8 esta ocupado al activarse, el item anterior se dropea al suelo y se coloca el Sello del Viajero.
+- Tarea de seguridad configurable cada 5 segundos para reponer el item y eliminar copias extra.
+
+Archivos modificados:
+- pom.xml: version 1.2.11
+- src/main/resources/plugin.yml: version 1.2.11
+- src/main/resources/config.yml: agregado social-menu-item
+- src/main/java/com/mdvcraft/mdvsocial/MDVSocialPlugin.java: inicializa y recarga SocialMenuItemManager
+
+Archivo nuevo:
+- src/main/java/com/mdvcraft/mdvsocial/SocialMenuItemManager.java
+
+Para actualizar un servidor existente:
+1. No borres plugins/MDVSocial/.
+2. Compila el JAR con Maven desde GitHub.
+3. Apaga el servidor.
+4. Reemplaza solo el JAR viejo por el nuevo.
+5. Agrega manualmente el bloque social-menu-item a tu config.yml actual.
+6. Enciende el servidor.
+
+Bloque de config:
+
+social-menu-item:
+  enabled: true
+  slot: 8
+  command: social
+  check-interval-seconds: 5
+  drop-replaced-item: true
+  remove-extra-copies: true
+  remove-when-disabled: false
+  material: COMPASS
+  name: '&6&lSello del Viajero'
+  lore:
+    - '&7Un sello entregado a todo forastero'
+    - '&7que llega a las tierras de MDVCRAFT.'
+    - ''
+    - '&eClick derecho &7para abrir el menu social.'
+  glowing: true
+  custom-model-data: 0
