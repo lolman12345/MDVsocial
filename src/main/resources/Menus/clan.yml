@@ -12,6 +12,7 @@ items:
       - ''
       - '&eClick para continuar.'
     action: OPEN_CONDITIONAL_MENU
+    sound: open
     condition-placeholder: '%mdvclans_is_in_clan%'
     condition-equals: 'true'
     true-menu: clan_con_clan
@@ -22,9 +23,11 @@ items:
     material: ARROW
     name: '&eVolver'
     action: BACK
+    sound: back
 
   cerrar:
     slot: 26
     material: BARRIER
     name: '&cCerrar'
     action: CLOSE
+    sound: close

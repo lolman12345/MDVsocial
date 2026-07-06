@@ -208,3 +208,28 @@ MDVSocialAPI.getEquippedTitlePrefix(uuid, true);
 ```
 
 Esto permite que MDVClans u otros plugins muestren el título equipado de jugadores distintos al jugador que está mirando el menú.
+
+## MDVSocial Core UI desde 1.3.0
+
+MDVSocial puede usarse como base visual para otros plugins propios de MDVCRAFT. La lógica específica debe quedarse en cada plugin, pero pueden reutilizarse sonidos, colores, inventarios y botones comunes mediante `MDVSocialAPI`.
+
+Ejemplo rápido:
+
+```java
+Inventory inv = MDVSocialAPI.createInventory("&8MDVRecetas", 54, true);
+inv.setItem(45, MDVSocialAPI.createPreviousPageButton());
+inv.setItem(49, MDVSocialAPI.createCloseButton());
+inv.setItem(53, MDVSocialAPI.createNextPageButton());
+player.openInventory(inv);
+MDVSocialAPI.playUISound(player, "open");
+```
+
+En el listener del plugin externo se puede leer la acción común:
+
+```java
+String action = MDVSocialAPI.getButtonAction(event.getCurrentItem());
+if (action.equals("CLOSE")) {
+    event.getWhoClicked().closeInventory();
+    MDVSocialAPI.playUISound((Player) event.getWhoClicked(), "close");
+}
+```

@@ -1,12 +1,27 @@
 package com.mdvcraft.mdvsocial;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /**
- * API simple para consultar titulos equipados desde otros plugins de MDVCRAFT.
+ * API simple de MDVSocial para consultar titulos, cartas de clan y reutilizar utilidades de UI.
+ *
+ * Uso pensado para plugins propios:
+ * - MDVSocialAPI.openMenu(player, "main");
+ * - MDVSocialAPI.playUISound(player, "open");
+ * - MDVSocialAPI.createInventory("&8Mi Menu", 54, true);
+ * - MDVSocialAPI.createButton(...);
+ *
+ * Importante: las UIs especificas de cada plugin siguen manejando su propia logica.
+ * MDVSocial solo aporta base visual, botones, sonidos y utilidades comunes.
  */
 public final class MDVSocialAPI {
     private MDVSocialAPI() { }
@@ -44,6 +59,7 @@ public final class MDVSocialAPI {
         MDVSocialPlugin plugin = plugin();
         return plugin == null ? "" : plugin.getEquippedTitlePrefix(uuid, colored);
     }
+
     public static boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, long expiresAt) {
         MDVSocialPlugin plugin = plugin();
         return plugin != null && plugin.sendClanInviteMail(targetUuid, targetName, inviterUuid, fromName, clanTag, clanName, message, "", expiresAt);
@@ -54,4 +70,78 @@ public final class MDVSocialAPI {
         return plugin != null && plugin.sendClanInviteMail(targetUuid, targetName, inviterUuid, fromName, clanTag, clanName, message, clanBannerData, expiresAt);
     }
 
+    /** Abre un menu modular de plugins/MDVSocial/Menus/<menuId>.yml. */
+    public static boolean openMenu(Player player, String menuId) {
+        return openMenu(player, menuId, 1);
+    }
+
+    /** Abre un menu modular de MDVSocial en una pagina concreta. */
+    public static boolean openMenu(Player player, String menuId, int page) {
+        MDVSocialPlugin plugin = plugin();
+        if (plugin == null || player == null) return false;
+        plugin.openSocialMenu(player, menuId, page);
+        return true;
+    }
+
+    /** Reproduce un sonido comun del core UI. Ejemplos: default, open, back, close, page, confirm, danger, invalid. */
+    public static boolean playUISound(Player player, String soundKey) {
+        MDVSocialPlugin plugin = plugin();
+        if (plugin == null || player == null) return false;
+        plugin.playUiSound(player, soundKey);
+        return true;
+    }
+
+    /** Crea un inventario visual con colores de MDVSocial. La logica del click la maneja el plugin que lo abre. */
+    public static Inventory createInventory(String title, int size, boolean fillWithDefaultFiller) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin == null ? null : plugin.createCoreInventory(title, size, fillWithDefaultFiller);
+    }
+
+    /** Crea un boton con metadatos comunes de MDVSocial. */
+    public static ItemStack createButton(Material material, int amount, String name, List<String> lore, String action, String targetMenu, List<String> commands, boolean closeOnClick, String sound) {
+        MDVSocialPlugin plugin = plugin();
+        if (plugin == null) return new ItemStack(material == null ? Material.PAPER : material, Math.max(1, Math.min(64, amount)));
+        return plugin.createCoreButton(material, amount, name, lore, action, targetMenu, commands, closeOnClick, sound);
+    }
+
+    public static ItemStack createBackButton() {
+        return createButton(Material.ARROW, 1, "&eVolver", Collections.emptyList(), "BACK", "", Collections.emptyList(), false, "back");
+    }
+
+    public static ItemStack createCloseButton() {
+        return createButton(Material.BARRIER, 1, "&cCerrar", Collections.emptyList(), "CLOSE", "", Collections.emptyList(), true, "close");
+    }
+
+    public static ItemStack createNextPageButton() {
+        return createButton(Material.ARROW, 1, "&aPagina siguiente", Collections.emptyList(), "NEXT_PAGE", "", Collections.emptyList(), false, "page");
+    }
+
+    public static ItemStack createPreviousPageButton() {
+        return createButton(Material.ARROW, 1, "&ePagina anterior", Collections.emptyList(), "PREVIOUS_PAGE", "", Collections.emptyList(), false, "page");
+    }
+
+    public static String getButtonAction(ItemStack item) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin == null ? "" : plugin.getCoreButtonAction(item);
+    }
+
+    public static String getButtonTargetMenu(ItemStack item) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin == null ? "" : plugin.getCoreButtonTargetMenu(item);
+    }
+
+    public static List<String> getButtonCommands(ItemStack item) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin == null ? Collections.emptyList() : plugin.getCoreButtonCommands(item);
+    }
+
+    public static boolean shouldCloseOnClick(ItemStack item) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin != null && plugin.coreButtonShouldCloseOnClick(item);
+    }
+
+    public static String colorize(String text) {
+        MDVSocialPlugin plugin = plugin();
+        return plugin == null ? (text == null ? "" : text) : plugin.colorize(text);
+    }
 }

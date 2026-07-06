@@ -13,6 +13,7 @@ items:
       - '&7Compra, equipa o revisa titulos.'
       - '&eClick para abrir.'
     action: OPEN_TITLES
+    sound: open
 
   clan:
     slot: 13
@@ -24,6 +25,7 @@ items:
       - '&8Si tienes clan, muestra su banner.'
       - '&eClick para abrir.'
     action: OPEN_CONDITIONAL_MENU
+    sound: open
     condition-placeholder: '%mdvclans_is_in_clan%'
     condition-equals: 'true'
     true-menu: clan_con_clan
@@ -37,6 +39,7 @@ items:
       - '&7Comandos sociales utiles.'
       - '&eClick para abrir.'
     action: OPEN_MENU
+    sound: open
     target-menu: ayuda
 
   cerrar:
@@ -44,3 +47,4 @@ items:
     material: BARRIER
     name: '&cCerrar'
     action: CLOSE
+    sound: close

@@ -8,6 +8,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -87,6 +88,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private org.bukkit.NamespacedKey keyMenu;
     private org.bukkit.NamespacedKey keyTargetMenu;
     private org.bukkit.NamespacedKey keyCommands;
+    private org.bukkit.NamespacedKey keySound;
     private org.bukkit.NamespacedKey keyCloseOnClick;
     private org.bukkit.NamespacedKey keyConditionPlaceholder;
     private org.bukkit.NamespacedKey keyConditionEquals;
@@ -106,6 +108,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         keyMenu = new org.bukkit.NamespacedKey(this, "menu");
         keyTargetMenu = new org.bukkit.NamespacedKey(this, "target_menu");
         keyCommands = new org.bukkit.NamespacedKey(this, "commands");
+        keySound = new org.bukkit.NamespacedKey(this, "sound");
         keyCloseOnClick = new org.bukkit.NamespacedKey(this, "close_on_click");
         keyConditionPlaceholder = new org.bukkit.NamespacedKey(this, "condition_placeholder");
         keyConditionEquals = new org.bukkit.NamespacedKey(this, "condition_equals");
@@ -152,7 +155,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         playerHomesMenuManager = new PlayerHomesMenuManager(this);
         playerHomesMenuManager.enable();
 
-        getLogger().info("MDVSocial 1.2.14 habilitado.");
+        getLogger().info("MDVSocial 1.3.0 habilitado.");
     }
 
     @Override
@@ -1133,7 +1136,8 @@ items:
                     commands,
                     consoleCommands,
                     actionSec.getBoolean("close-on-click", true),
-                    actionSec.getBoolean("cancel-event", true)
+                    actionSec.getBoolean("cancel-event", true),
+                    actionSec.getString("sound", "")
             );
             externalGuiActions.add(def);
         }
@@ -1241,6 +1245,7 @@ items:
                     normalize(sec.getString("true-menu", sec.getString("menu-true", ""))),
                     normalize(sec.getString("false-menu", sec.getString("menu-false", ""))),
                     normalize(sec.getString("clans-menu", sec.getString("mdvclans-menu", target))),
+                    sec.getString("sound", sec.getString("click-sound", "")),
                     sec.getBoolean("use-clan-banner", sec.getBoolean("dynamic-clan-banner", false))
             );
             items.add(item);
@@ -1339,6 +1344,7 @@ items:
         if (targetName != null && !targetName.isBlank()) meta.getPersistentDataContainer().set(keyFriendTargetName, PersistentDataType.STRING, targetName);
         meta.getPersistentDataContainer().set(keyFriendTargetOnline, PersistentDataType.STRING, String.valueOf(targetOnline));
         if (!def.commands.isEmpty()) meta.getPersistentDataContainer().set(keyCommands, PersistentDataType.STRING, String.join("\n", def.commands));
+        if (def.sound != null && !def.sound.isBlank()) meta.getPersistentDataContainer().set(keySound, PersistentDataType.STRING, def.sound);
         meta.getPersistentDataContainer().set(keyCloseOnClick, PersistentDataType.STRING, String.valueOf(def.closeOnClick));
         item.setItemMeta(meta);
         return item;
@@ -2491,6 +2497,10 @@ items:
             if (!lore.isEmpty()) meta.setLore(lore);
         }
         if (action != null && !action.isEmpty()) meta.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, action);
+        if (sec != null) {
+            String sound = sec.getString("sound", sec.getString("click-sound", ""));
+            if (sound != null && !sound.isBlank()) meta.getPersistentDataContainer().set(keySound, PersistentDataType.STRING, sound);
+        }
         if (titleId != null && !titleId.isEmpty()) meta.getPersistentDataContainer().set(keyTitle, PersistentDataType.STRING, titleId);
         item.setItemMeta(meta);
         return item;
@@ -2659,6 +2669,7 @@ items:
         boolean targetOnline = Bukkit.getPlayer(targetUuid) != null;
 
         event.setCancelled(getConfig().getBoolean("social-friend-options.cancel-event", true));
+        playUiSound(player, getConfig().getString("social-friend-options.sound", "open"));
         String targetMenu = normalize(getConfig().getString("social-friend-options.target-menu", "amigo_opciones"));
         Bukkit.getScheduler().runTask(this, () -> openCustomMenu(player, targetMenu, 1, "", 1, targetUuid, targetName, targetOnline));
         return true;
@@ -2706,6 +2717,7 @@ items:
         for (ExternalGuiAction def : externalGuiActions) {
             if (!def.matches(title, slot)) continue;
             if (def.cancelEvent) event.setCancelled(true);
+            playUiSound(player, def.sound == null || def.sound.isBlank() ? "default" : def.sound);
             runExternalGuiCommands(player, def);
             return true;
         }
@@ -2729,6 +2741,179 @@ items:
             }
         };
         Bukkit.getScheduler().runTask(this, task);
+    }
+
+
+    public void openSocialMenu(Player player, String menuId, int page) {
+        if (player == null) return;
+        openRequestedSocialMenu(player, menuId, Math.max(1, page));
+    }
+
+    public Inventory createCoreInventory(String title, int size, boolean fillWithDefaultFiller) {
+        Inventory inv = Bukkit.createInventory((InventoryHolder) null, normalizeMenuSize(size), color(title));
+        if (fillWithDefaultFiller) fill(inv);
+        return inv;
+    }
+
+    public ItemStack createCoreButton(Material material, int amount, String name, List<String> lore, String action, String targetMenu, List<String> commands, boolean closeOnClick, String sound) {
+        Material mat = material == null ? Material.PAPER : material;
+        ItemStack item = new ItemStack(mat, Math.max(1, Math.min(64, amount)));
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+        if (name != null && !name.isBlank()) meta.setDisplayName(color(name));
+        if (lore != null && !lore.isEmpty()) meta.setLore(lore.stream().map(this::color).collect(Collectors.toList()));
+        String normalizedAction = normalizeAction(action);
+        if (normalizedAction != null && !normalizedAction.isBlank()) meta.getPersistentDataContainer().set(keyAction, PersistentDataType.STRING, normalizedAction);
+        String normalizedTarget = normalize(targetMenu);
+        if (!normalizedTarget.isBlank()) meta.getPersistentDataContainer().set(keyTargetMenu, PersistentDataType.STRING, normalizedTarget);
+        if (commands != null && !commands.isEmpty()) meta.getPersistentDataContainer().set(keyCommands, PersistentDataType.STRING, String.join("\n", commands));
+        if (sound != null && !sound.isBlank()) meta.getPersistentDataContainer().set(keySound, PersistentDataType.STRING, sound);
+        meta.getPersistentDataContainer().set(keyCloseOnClick, PersistentDataType.STRING, String.valueOf(closeOnClick));
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public String getCoreButtonAction(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return "";
+        String action = item.getItemMeta().getPersistentDataContainer().get(keyAction, PersistentDataType.STRING);
+        return action == null ? "" : action;
+    }
+
+    public String getCoreButtonTargetMenu(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return "";
+        String target = item.getItemMeta().getPersistentDataContainer().get(keyTargetMenu, PersistentDataType.STRING);
+        return target == null ? "" : target;
+    }
+
+    public List<String> getCoreButtonCommands(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return Collections.emptyList();
+        String raw = item.getItemMeta().getPersistentDataContainer().get(keyCommands, PersistentDataType.STRING);
+        if (raw == null || raw.isBlank()) return Collections.emptyList();
+        return Arrays.asList(raw.split("\\n"));
+    }
+
+    public boolean coreButtonShouldCloseOnClick(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return false;
+        return shouldCloseOnClick(item.getItemMeta().getPersistentDataContainer());
+    }
+
+    public String colorize(String text) {
+        return color(text);
+    }
+
+    private void playButtonSound(Player player, String action, PersistentDataContainer pdc) {
+        if (player == null) return;
+        String explicit = pdc == null ? "" : pdc.get(keySound, PersistentDataType.STRING);
+        if (explicit != null && !explicit.isBlank() && playUiSoundInternal(player, explicit)) return;
+        if (action != null && !action.isBlank() && playUiSoundInternal(player, "actions." + action)) return;
+        String mapped = mapActionSound(action);
+        if (!mapped.isBlank() && playUiSoundInternal(player, mapped)) return;
+        playUiSoundInternal(player, "default");
+    }
+
+    public void playUiSound(Player player, String soundKey) {
+        if (player == null) return;
+        if (!playUiSoundInternal(player, soundKey == null || soundKey.isBlank() ? "default" : soundKey)) {
+            playUiSoundInternal(player, "default");
+        }
+    }
+
+    private String mapActionSound(String action) {
+        if (action == null) return "default";
+        return switch (action) {
+            case "CLOSE" -> "close";
+            case "BACK" -> "back";
+            case "PREVIOUS_PAGE", "PREV_PAGE" -> "page";
+            case "NEXT_PAGE" -> "page";
+            case "OPEN_MENU", "OPEN_CONDITIONAL_MENU", "OPEN_MAIN", "OPEN_TITLES", "OPEN_TITLES_HOME", "OPEN_MY_TITLES", "OPEN_SHOP", "OPEN_LOCKED", "OPEN_RANKS", "OPEN_MAILBOX", "READ_MAIL", "MAIL_BACK" -> "open";
+            case "LOCKED_TITLE" -> "invalid";
+            case "BUY_TITLE", "EQUIP_TITLE", "CLEAR_TITLE", "ACCEPT_CLAN_INVITE" -> "confirm";
+            case "DELETE_MAIL", "REJECT_CLAN_INVITE", "BLOCK_MAIL_SENDER" -> "danger";
+            default -> "default";
+        };
+    }
+
+    private boolean playUiSoundInternal(Player player, String keyOrSound) {
+        if (player == null || keyOrSound == null || keyOrSound.isBlank()) return false;
+        if (!getConfig().getBoolean("ui-core.sounds.enabled", true)) return true;
+        UiSoundDef def = resolveUiSound(keyOrSound);
+        if (def == null) return false;
+        try {
+            player.playSound(player.getLocation(), def.sound, def.volume, def.pitch);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private UiSoundDef resolveUiSound(String keyOrSound) {
+        String value = keyOrSound == null ? "" : keyOrSound.trim();
+        if (value.isBlank()) value = "default";
+
+        String path = "ui-core.sounds." + value;
+        UiSoundDef fromPath = soundFromConfigPath(path);
+        if (fromPath != null) return fromPath;
+
+        String normalizedKey = value.toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        if (!normalizedKey.equals(value)) {
+            fromPath = soundFromConfigPath("ui-core.sounds." + normalizedKey);
+            if (fromPath != null) return fromPath;
+        }
+
+        UiSoundDef builtIn = defaultUiSound(value);
+        if (builtIn != null) return builtIn;
+
+        return soundFromInline(value);
+    }
+
+    private UiSoundDef defaultUiSound(String key) {
+        String value = key == null ? "default" : key.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        if (value.startsWith("actions.")) value = value.substring("actions.".length()).toLowerCase(Locale.ROOT);
+        return switch (value) {
+            case "default" -> new UiSoundDef(Sound.UI_BUTTON_CLICK, 0.6F, 1.2F);
+            case "open", "open_menu", "open_conditional_menu", "open_main", "open_titles", "open_titles_home", "open_my_titles", "open_shop", "open_locked", "open_ranks", "open_mailbox", "read_mail", "mail_back", "mdvclans_open" -> new UiSoundDef(Sound.UI_BUTTON_CLICK, 0.65F, 1.35F);
+            case "back" -> new UiSoundDef(Sound.UI_BUTTON_CLICK, 0.55F, 0.85F);
+            case "close" -> new UiSoundDef(Sound.BLOCK_CHEST_CLOSE, 0.55F, 1.15F);
+            case "page", "next_page", "previous_page", "prev_page" -> new UiSoundDef(Sound.ITEM_BOOK_PAGE_TURN, 0.7F, 1.15F);
+            case "confirm", "buy_title", "equip_title", "clear_title", "accept_clan_invite" -> new UiSoundDef(Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.65F, 1.25F);
+            case "danger", "delete_mail", "reject_clan_invite", "block_mail_sender" -> new UiSoundDef(Sound.ENTITY_VILLAGER_NO, 0.6F, 0.85F);
+            case "invalid", "locked_title" -> new UiSoundDef(Sound.BLOCK_NOTE_BLOCK_BASS, 0.65F, 0.65F);
+            default -> null;
+        };
+    }
+
+    private UiSoundDef soundFromConfigPath(String path) {
+        if (path == null || path.isBlank()) return null;
+        if (getConfig().isConfigurationSection(path)) {
+            ConfigurationSection sec = getConfig().getConfigurationSection(path);
+            if (sec == null) return null;
+            String sound = sec.getString("sound", sec.getString("name", ""));
+            UiSoundDef def = soundFromInline(sound);
+            if (def == null) return null;
+            def.volume = (float) sec.getDouble("volume", def.volume);
+            def.pitch = (float) sec.getDouble("pitch", def.pitch);
+            return def;
+        }
+        if (getConfig().isString(path)) return soundFromInline(getConfig().getString(path, ""));
+        return null;
+    }
+
+    private UiSoundDef soundFromInline(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String[] parts = raw.trim().split("[;|,]");
+        String soundName = parts[0].trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        try {
+            Sound sound = Sound.valueOf(soundName);
+            float volume = parts.length >= 2 ? parseFloat(parts[1], 0.6F) : 0.6F;
+            float pitch = parts.length >= 3 ? parseFloat(parts[2], 1.2F) : 1.2F;
+            return new UiSoundDef(sound, volume, pitch);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private float parseFloat(String raw, float fallback) {
+        try { return Float.parseFloat(raw.trim()); } catch (Exception ignored) { return fallback; }
     }
 
     private boolean evaluateMenuCondition(Player player, String placeholder, String expected) {
@@ -2758,6 +2943,7 @@ items:
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         String action = pdc.get(keyAction, PersistentDataType.STRING);
         if (action == null || action.isBlank()) return;
+        playButtonSound(player, action, pdc);
 
         switch (action) {
             case "CLOSE" -> player.closeInventory();
@@ -3468,6 +3654,18 @@ items:
         return values.stream().filter(v -> v.toLowerCase(Locale.ROOT).startsWith(low)).sorted().collect(Collectors.toList());
     }
 
+
+    static final class UiSoundDef {
+        final Sound sound;
+        float volume;
+        float pitch;
+        UiSoundDef(Sound sound, float volume, float pitch) {
+            this.sound = sound;
+            this.volume = volume;
+            this.pitch = pitch;
+        }
+    }
+
     static final class MenuHolder implements InventoryHolder {
         final String type;
         int page;
@@ -3512,8 +3710,9 @@ items:
         final List<String> consoleCommands;
         final boolean closeOnClick;
         final boolean cancelEvent;
+        final String sound;
 
-        ExternalGuiAction(String id, String titleEquals, String titleContains, List<Integer> slots, List<String> playerCommands, List<String> consoleCommands, boolean closeOnClick, boolean cancelEvent) {
+        ExternalGuiAction(String id, String titleEquals, String titleContains, List<Integer> slots, List<String> playerCommands, List<String> consoleCommands, boolean closeOnClick, boolean cancelEvent, String sound) {
             this.id = id == null ? "" : id;
             this.titleEquals = titleEquals == null ? "" : ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', titleEquals)).trim().toLowerCase(Locale.ROOT);
             this.titleContains = titleContains == null ? "" : ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', titleContains)).trim().toLowerCase(Locale.ROOT);
@@ -3522,6 +3721,7 @@ items:
             this.consoleCommands = consoleCommands == null ? Collections.emptyList() : consoleCommands;
             this.closeOnClick = closeOnClick;
             this.cancelEvent = cancelEvent;
+            this.sound = sound == null ? "" : sound;
         }
 
         boolean matches(String rawTitle, int slot) {
@@ -3568,9 +3768,10 @@ items:
         final String trueMenu;
         final String falseMenu;
         final String clansMenu;
+        final String sound;
         final boolean useClanBanner;
 
-        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen, String conditionPlaceholder, String conditionEquals, String trueMenu, String falseMenu, String clansMenu, boolean useClanBanner) {
+        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen, String conditionPlaceholder, String conditionEquals, String trueMenu, String falseMenu, String clansMenu, String sound, boolean useClanBanner) {
             this.id = id;
             this.slot = slot;
             this.material = material == null ? "PAPER" : material;
@@ -3589,6 +3790,7 @@ items:
             this.trueMenu = trueMenu == null ? "" : trueMenu;
             this.falseMenu = falseMenu == null ? "" : falseMenu;
             this.clansMenu = clansMenu == null ? "" : clansMenu;
+            this.sound = sound == null ? "" : sound;
             this.useClanBanner = useClanBanner;
         }
 

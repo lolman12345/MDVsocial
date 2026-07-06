@@ -1,0 +1,37 @@
+MDVSocial 1.3.0 - Core UI inicial
+
+Cambios principales:
+- Añadidos sonidos al hacer click en botones de MDVSocial.
+- Los sonidos funcionan con los menús actuales sin tener que editar cada botón, porque se resuelven por acción: OPEN_MENU, BACK, CLOSE, NEXT_PAGE, etc.
+- Cada botón de Menus/*.yml puede sobrescribir su sonido con:
+    sound: open
+    sound: close
+    sound: UI_BUTTON_CLICK;0.6;1.2
+- Añadida sección ui-core.sounds en config.yml para configurar sonidos globales.
+- Añadidos sonidos también en:
+    - Puente de opciones de amigos de MMOCore.
+    - external-gui-actions.
+- Ampliada MDVSocialAPI para que futuros plugins puedan usar MDVSocial como core visual:
+    - openMenu(player, menuId, page)
+    - playUISound(player, soundKey)
+    - createInventory(title, size, fillWithDefaultFiller)
+    - createButton(...)
+    - createBackButton()
+    - createCloseButton()
+    - createNextPageButton()
+    - createPreviousPageButton()
+    - getButtonAction(item)
+    - getButtonTargetMenu(item)
+    - getButtonCommands(item)
+    - shouldCloseOnClick(item)
+    - colorize(text)
+
+Notas para actualizar:
+- Puedes reemplazar el JAR sin borrar la carpeta de MDVSocial.
+- Si tu config.yml existente no tiene ui-core.sounds, igual hay sonidos internos por defecto.
+- Para personalizar sonidos, copia la sección ui-core.sounds desde el nuevo config.yml hacia tu config actual.
+- MDVRecetas, MDVTrades, MDVClans, MDVSpawn y futuros plugins podrán depender de MDVSocial y usar su API como base visual.
+
+Diseño recomendado:
+- MDVSocial Core aporta botones, sonidos, colores y utilidades comunes.
+- Cada plugin mantiene su lógica específica. Por ejemplo, MDVRecetas maneja su buscador tipo Terraria y su editor de recetas; MDVSocial solo le da piezas reutilizables de UI.
