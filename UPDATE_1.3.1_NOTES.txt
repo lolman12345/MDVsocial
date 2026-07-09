@@ -1,0 +1,15 @@
+MDVSocial 1.3.1
+
+- Añadidos placeholders de vida para miembros de party en scoreboard:
+  %mdvsocial_party_member_1_health_line%
+  %mdvsocial_party_member_1_health%
+  %mdvsocial_party_member_1_health_bar%
+  %mdvsocial_party_member_1_name%
+
+Funciona igual para party_member_2, 3, 4 y 5.
+
+Ejemplo recomendado:
+%mdvsocial_party_member_1_health_line%
+
+Formato de health_line:
+• Nombre 10/10❤

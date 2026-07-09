@@ -3325,16 +3325,69 @@ items:
         if (key.equals("party_members")) return members.isEmpty() ? "" : String.join(", ", members);
 
         if (key.startsWith("party_member_")) {
+            String rest = key.substring("party_member_".length());
+            String mode = "line";
+
+            if (rest.endsWith("_health_line")) {
+                rest = rest.substring(0, rest.length() - "_health_line".length());
+                mode = "health_line";
+            } else if (rest.endsWith("_health_bar")) {
+                rest = rest.substring(0, rest.length() - "_health_bar".length());
+                mode = "health_bar";
+            } else if (rest.endsWith("_health")) {
+                rest = rest.substring(0, rest.length() - "_health".length());
+                mode = "health";
+            } else if (rest.endsWith("_name")) {
+                rest = rest.substring(0, rest.length() - "_name".length());
+                mode = "name";
+            }
+
             try {
-                int index = Integer.parseInt(key.substring("party_member_".length())) - 1;
+                int index = Integer.parseInt(rest) - 1;
                 if (index < 0 || index >= members.size()) return "";
-                return color("&7• &f" + members.get(index));
+                String memberName = members.get(index);
+
+                return switch (mode) {
+                    case "name" -> color(memberName);
+                    case "health" -> color(getPartyMemberHealthCounter(memberName));
+                    case "health_bar" -> color(getPartyMemberHealthBar(memberName));
+                    case "health_line" -> color("&7• &f" + memberName + " " + getPartyMemberHealthCounter(memberName));
+                    default -> color("&7• &f" + memberName);
+                };
             } catch (NumberFormatException ignored) {
                 return "";
             }
         }
 
         return "";
+    }
+
+    private String getPartyMemberHealthCounter(String memberName) {
+        Player online = Bukkit.getPlayerExact(memberName);
+        if (online == null || !online.isOnline()) return "&8Desconectado";
+
+        double health = Math.max(0.0D, online.getHealth());
+        double maxHealth = Math.max(1.0D, online.getMaxHealth());
+        int hearts = (int) Math.ceil(health / 2.0D);
+        int maxHearts = (int) Math.ceil(maxHealth / 2.0D);
+        return "&c" + hearts + "&7/&c" + maxHearts + "❤";
+    }
+
+    private String getPartyMemberHealthBar(String memberName) {
+        Player online = Bukkit.getPlayerExact(memberName);
+        if (online == null || !online.isOnline()) return "&8----------";
+
+        double health = Math.max(0.0D, online.getHealth());
+        double maxHealth = Math.max(1.0D, online.getMaxHealth());
+        int filled = (int) Math.round((health / maxHealth) * 10.0D);
+        filled = Math.max(0, Math.min(10, filled));
+
+        StringBuilder bar = new StringBuilder("&8[");
+        for (int i = 0; i < 10; i++) {
+            bar.append(i < filled ? "&c|" : "&7|");
+        }
+        bar.append("&8]");
+        return bar.toString();
     }
 
     private void runConfiguredCommands(Player player, String path) {
