@@ -3368,9 +3368,9 @@ items:
 
         double health = Math.max(0.0D, online.getHealth());
         double maxHealth = Math.max(1.0D, online.getMaxHealth());
-        int hearts = (int) Math.ceil(health / 2.0D);
-        int maxHearts = (int) Math.ceil(maxHealth / 2.0D);
-        return "&c" + hearts + "&7/&c" + maxHearts + "❤";
+        int healthPoints = (int) Math.ceil(health);
+        int maxHealthPoints = (int) Math.ceil(maxHealth);
+        return "&c" + healthPoints + "&7/&c" + maxHealthPoints + "❤";
     }
 
     private String getPartyMemberHealthBar(String memberName) {

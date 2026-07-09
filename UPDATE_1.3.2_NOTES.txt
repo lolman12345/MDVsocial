@@ -1,0 +1,13 @@
+MDVSocial 1.3.2
+
+Cambios:
+- Los placeholders de vida de party ahora muestran puntos de vida reales.
+- Antes: 10/10❤ para 20 HP.
+- Ahora: 20/20❤ para 20 HP.
+
+Placeholders afectados:
+- %mdvsocial_party_member_1_health%
+- %mdvsocial_party_member_1_health_line%
+- Igual para member_2, member_3, member_4 y member_5.
+
+No requiere cambios en config.yml. Solo reemplazar el jar y reiniciar.
