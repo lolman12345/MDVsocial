@@ -38,6 +38,8 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.profile.PlayerTextures;
+import org.bukkit.scoreboard.DisplaySlot;
+import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.util.io.BukkitObjectInputStream;
 
 import java.io.ByteArrayInputStream;
@@ -74,6 +76,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private final List<Integer> listSlots = new ArrayList<>();
     private final Map<UUID, MailComposeSession> mailSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PermissionAttachment> scoreboardPartyAttachments = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> scoreboardRepairLastAttempt = new ConcurrentHashMap<>();
 
     private File dataFile;
     private YamlConfiguration data;
@@ -2589,6 +2592,8 @@ items:
             setScoreboardPartyPermission(player, false);
         }
         Bukkit.getScheduler().runTaskLater(this, () -> syncScoreboardPartyPermission(player), 20L);
+        scheduleScoreboardRepair(player, 60L);
+        scheduleScoreboardRepair(player, 140L);
     }
 
     @EventHandler
@@ -2602,6 +2607,7 @@ items:
                 attachment.remove();
             } catch (Throwable ignored) { }
         }
+        scoreboardRepairLastAttempt.remove(player.getUniqueId());
     }
 
     private void syncAllScoreboardPartyPermissions() {
@@ -2635,6 +2641,33 @@ items:
 
         if (getConfig().getBoolean("scoreboard-party-permission.debug", false)) {
             getLogger().info("Scoreboard party permission: " + player.getName() + " -> " + permission + " = " + value);
+        }
+        scheduleScoreboardRepair(player, 20L);
+    }
+
+    private void scheduleScoreboardRepair(Player player, long delayTicks) {
+        if (player == null || !getConfig().getBoolean("scoreboard-repair.enabled", true)) return;
+        Bukkit.getScheduler().runTaskLater(this, () -> repairScoreboardIfMissing(player), Math.max(1L, delayTicks));
+    }
+
+    private void repairScoreboardIfMissing(Player player) {
+        if (player == null || !player.isOnline() || !getConfig().getBoolean("scoreboard-repair.enabled", true)) return;
+        Scoreboard board = player.getScoreboard();
+        boolean hasSidebar = board != null && board.getObjective(DisplaySlot.SIDEBAR) != null;
+        if (hasSidebar) return;
+
+        long cooldown = Math.max(1L, getConfig().getLong("scoreboard-repair.cooldown-seconds", 15L)) * 1000L;
+        long now = System.currentTimeMillis();
+        long last = scoreboardRepairLastAttempt.getOrDefault(player.getUniqueId(), 0L);
+        if (now - last < cooldown) return;
+        scoreboardRepairLastAttempt.put(player.getUniqueId(), now);
+
+        String command = getConfig().getString("scoreboard-repair.command", "animatedsb toggle {player}");
+        if (command == null || command.isBlank()) return;
+        command = command.replace("{player}", player.getName()).replace("%player%", player.getName());
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.startsWith("/") ? command.substring(1) : command);
+        if (getConfig().getBoolean("scoreboard-repair.debug", false)) {
+            getLogger().info("Reparación de scoreboard ejecutada para " + player.getName() + ": " + command);
         }
     }
 

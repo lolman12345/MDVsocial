@@ -1,0 +1,5 @@
+MDVSocial 1.3.3
+- Parche opcional para AnimatedScoreboard.
+- Al entrar y después de cambios de party, comprueba si falta el objetivo SIDEBAR.
+- Solo si falta, ejecuta el comando configurable animatedsb toggle {player}.
+- Incluye cooldown para evitar alternancias repetidas.

@@ -1,3 +1,11 @@
+# Reparación barata para AnimatedScoreboard.
+# Solo ejecuta el comando si el jugador no tiene objetivo SIDEBAR.
+scoreboard-repair:
+  enabled: true
+  command: 'animatedsb toggle {player}'
+  cooldown-seconds: 15
+  debug: false
+
 # ==========================================================
 # MDVSocial 1.3.0
 # Menu social + sistema de titulos cosmeticos para MDVCRAFT
