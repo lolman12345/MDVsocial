@@ -1,0 +1,140 @@
+# MDVSocial 1.4.0 - BLOQUES PARA FUSIONAR CON TU CONFIG ACTUAL
+# No reemplaces secciones completas si ya las personalizaste.
+# Como alternativa, usa config-1.4.0.yml como referencia completa.
+
+messages:
+  mail-broadcast-sent: '&aCarta global &e{id} &aenviada a &e{sent} &ajugadores. &7Omitidos: &e{skipped}&7.'
+  mail-broadcast-not-found: '&cNo existe una campaña de correo activa con ese ID.'
+  mail-broadcast-deleted: '&aCampaña &e{id} &aeliminada de &e{removed} &abuzones.'
+  title-invalid-reset: '&eTu titulo anterior ya no estaba desbloqueado. Se equipo automaticamente {title}&e.'
+  title-invalid-cleared: '&eTu titulo anterior ya no estaba desbloqueado y fue retirado.'
+  punishment-title-invalid: '&cEse titulo no esta configurado como titulo de castigo.'
+  punishment-applied: '&aAplicaste el titulo de castigo {title} &aa &e{player}&a.'
+  punishment-applied-target: '&cEl staff te aplico el titulo obligatorio {title}&c.'
+  punishment-removed: '&aQuitaste el titulo de castigo de &e{player}&a.'
+  punishment-removed-target: '&aEl staff retiro tu titulo de castigo.'
+  punishment-not-active: '&cEse jugador no tiene un titulo de castigo activo.'
+  punishment-must-remove-first: '&cPrimero debes quitar el castigo con /mdvsocial title unpunish <jugador>.'
+  punishment-title-locked: '&cNo puedes cambiar este titulo hasta que el staff retire el castigo.'
+
+settings:
+  invalid-title-fallback: aventurero
+  active-title-validation:
+    enabled: true
+    interval-ticks: 100
+
+punishment-titles:
+  enabled: true
+  default-title: pecador
+
+mail:
+  enabled: true
+  max-message-length: 180
+  expire-after-days: 10
+  cleanup-interval-minutes: 30
+  allow-unknown-targets: false
+  name-suggestions-limit: 5
+  date-format: 'dd/MM/yyyy HH:mm'
+  never-expires-text: 'Nunca'
+  default-mailbox-size: 10
+  mailbox-size-permissions:
+    'mdvsocial.mailbox.20': 20
+    'mdvsocial.mailbox.30': 30
+    'mdvsocial.mailbox.50': 50
+  server-author-name: 'MDVCRAFT'
+  server-mail-expire-days: 30
+  server-mail-ignore-mailbox-limit: true
+  welcome:
+    enabled: true
+    id: 'bienvenida-v1'
+    only-first-join: true
+    author-name: 'MDVCRAFT'
+    message: '¡Bienvenido a MDVCRAFT! Revisa /social para conocer tus hogares, títulos, correo, amigos y demás sistemas.'
+    expire-days: 3
+    ignore-mailbox-limit: true
+  clan-invites:
+    ignore-mailbox-limit: true
+  menus:
+    mailbox:
+      title: '&8Buzón {page}/{max_page} &7({count}/{limit})'
+      size: 54
+      slots: [10,11,12,13,14,15,16,19,20,21,22,23,24,25,28,29,30,31,32,33,34,37,38,39,40,41,42,43]
+    read:
+      title: '&8Carta de {sender}'
+      size: 27
+      letter-slot: 13
+      back-slot: 11
+      reply-slot: 14
+      delete-slot: 15
+      block-slot: 16
+  items:
+    empty:
+      name: '&7Buzón vacío'
+      lore: ['&8No tienes cartas guardadas.']
+    reply:
+      material: WRITABLE_BOOK
+      name: '&aResponder'
+      lore: ['&7Escribe una respuesta al remitente.']
+    delete:
+      material: LAVA_BUCKET
+      name: '&cEliminar carta'
+      lore: ['&7Elimina esta carta de tu buzón.']
+    block-sender:
+      material: BARRIER
+      name: '&cBloquear remitente'
+      lore: ['&7Impide recibir nuevas cartas de este jugador.']
+    clan-invite-accept:
+      material: LIME_DYE
+      name: '&a&lAceptar invitación'
+    clan-invite-reject:
+      material: RED_DYE
+      name: '&c&lRechazar invitación'
+
+homes-menu:
+  suspended-homes:
+    enabled: true
+    mode: LOCK_EXCESS
+    restore-on-upgrade: true
+    allow-delete-locked: true
+    bypass-permission: 'mdvsocial.homes.lock.bypass'
+    preferred-home-names: [casa1, casa2, casa3, casa4]
+    intercept-commands: [home, ehome, 'essentials:home', 'essentials:ehome']
+  status-text:
+    suspended: '&cSuspendida'
+  messages:
+    home-suspended: '&cEl hogar &e{home} &cesta suspendido porque supera tu limite actual de &e{max_homes}&c.'
+    all-homes-locked: '&cTodos tus hogares estan suspendidos. Recupera un limite mayor o elimina uno.'
+    locked-delete-hint: '&eUsa click derecho para eliminar el hogar suspendido &6{home}&e.'
+
+# Añade estos títulos dentro de tu sección titles existente.
+titles:
+  pecador:
+    display: '&4Pecador'
+    prefix: '&4[Pecador]&r '
+    material: REDSTONE
+    purchasable: false
+    hidden: true
+    player-equippable: false
+    punishment: true
+    lore: ['&cTítulo obligatorio aplicado por el staff.']
+  esclavo:
+    display: '&8Esclavo'
+    prefix: '&8[Esclavo]&r '
+    material: CHAIN
+    purchasable: false
+    hidden: true
+    player-equippable: false
+    punishment: true
+    lore: ['&cTítulo obligatorio aplicado por el staff.']
+
+# Añade page y slot dentro de cada rango que ya tengas.
+ranks:
+  aventurero:
+    page: 1
+    slot: 10
+  vip:
+    page: 1
+    slot: 13
+  noble:
+    page: 1
+    slot: 16

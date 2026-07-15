@@ -38,8 +38,6 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.profile.PlayerTextures;
-import org.bukkit.scoreboard.DisplaySlot;
-import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.util.io.BukkitObjectInputStream;
 
 import java.io.ByteArrayInputStream;
@@ -59,6 +57,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Objects;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -76,7 +76,6 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private final List<Integer> listSlots = new ArrayList<>();
     private final Map<UUID, MailComposeSession> mailSessions = new ConcurrentHashMap<>();
     private final Map<UUID, PermissionAttachment> scoreboardPartyAttachments = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> scoreboardRepairLastAttempt = new ConcurrentHashMap<>();
 
     private File dataFile;
     private YamlConfiguration data;
@@ -147,6 +146,9 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         long cleanupMinutes = Math.max(5L, getConfig().getLong("mail.cleanup-interval-minutes", 30L));
         Bukkit.getScheduler().runTaskTimer(this, this::cleanupExpiredMail, 20L * 60L, cleanupMinutes * 60L * 20L);
 
+        long titleValidationTicks = Math.max(20L, getConfig().getLong("settings.active-title-validation.interval-ticks", 100L));
+        Bukkit.getScheduler().runTaskTimer(this, this::validateAllOnlineTitles, 40L, titleValidationTicks);
+
         if (getConfig().getBoolean("scoreboard-party-permission.enabled", true)) {
             long interval = Math.max(10L, getConfig().getLong("scoreboard-party-permission.sync-interval-ticks", 20L));
             Bukkit.getScheduler().runTaskTimer(this, this::syncAllScoreboardPartyPermissions, 20L, interval);
@@ -158,7 +160,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         playerHomesMenuManager = new PlayerHomesMenuManager(this);
         playerHomesMenuManager.enable();
 
-        getLogger().info("MDVSocial 1.3.0 habilitado.");
+        getLogger().info("MDVSocial 1.4.0 habilitado.");
     }
 
     @Override
@@ -261,6 +263,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                     t.getString("unlock-permission", ""),
                     t.getBoolean("hidden", false),
                     t.getBoolean("player-equippable", !t.getBoolean("hidden", false)),
+                    t.getBoolean("punishment", false),
                     t.getStringList("lore")
             );
             titles.put(cleanId, def);
@@ -280,6 +283,8 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                     r.getString("display", cleanId),
                     r.getString("material", "PAPER"),
                     r.getString("permission", ""),
+                    Math.max(1, r.getInt("page", 1)),
+                    r.getInt("slot", -1),
                     r.getStringList("lore")
             );
             ranks.put(cleanId, def);
@@ -412,8 +417,12 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             return handleAdminMailCommand(sender, args);
         }
 
+        if (sub.equals("homes") || sub.equals("hogares") || sub.equals("casas")) {
+            return handleAdminHomesCommand(sender, args);
+        }
+
         if (!sub.equals("title")) {
-            sender.sendMessage(color("&cUso: /mdvsocial reload | /mdvsocial open <jugador> <menu> [pagina] | /mdvsocial title ... | /mdvsocial mail ..."));
+            sender.sendMessage(color("&cUso: /mdvsocial reload | /mdvsocial open <jugador> <menu> [pagina] | /mdvsocial title ... | /mdvsocial mail ... | /mdvsocial homes ..."));
             return true;
         }
 
@@ -423,6 +432,44 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         }
 
         String action = args[1].toLowerCase(Locale.ROOT);
+
+        if ((action.equals("punish") || action.equals("castigar")) && args.length >= 3) {
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
+            String titleId = args.length >= 4 ? normalize(args[3]) : getDefaultPunishmentTitleId();
+            if (!isPunishmentTitle(titleId)) {
+                msg(sender, "punishment-title-invalid");
+                return true;
+            }
+            applyPunishmentTitle(target, titleId);
+            msg(sender, "punishment-applied", Map.of("player", target.getName() == null ? args[2] : target.getName(), "title", color(titles.get(titleId).display)));
+            if (target.isOnline()) msg(target.getPlayer(), "punishment-applied-target", Map.of("title", color(titles.get(titleId).display)));
+            return true;
+        }
+
+        if (action.equals("unpunish") || action.equals("quitar-castigo") || action.equals("perdonar")) {
+            if (args.length < 3) {
+                sendTitleHelp(sender);
+                return true;
+            }
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
+            if (!isPunished(target.getUniqueId())) {
+                msg(sender, "punishment-not-active");
+                return true;
+            }
+            removePunishmentTitle(target);
+            msg(sender, "punishment-removed", Map.of("player", target.getName() == null ? args[2] : target.getName()));
+            if (target.isOnline()) msg(target.getPlayer(), "punishment-removed-target");
+            return true;
+        }
+
+        if ((action.equals("set") || action.equals("clear")) && args.length >= 3) {
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
+            if (isPunished(target.getUniqueId())) {
+                msg(sender, "punishment-must-remove-first");
+                return true;
+            }
+        }
+
         if (action.equals("give") && args.length >= 4) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
             String titleId = normalize(args[3]);
@@ -453,6 +500,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             }
             giveTitle(target.getUniqueId(), target.getName(), titleId);
             setActiveTitle(target.getUniqueId(), titleId);
+            saveData();
             if (target.isOnline()) runEquipCommands(target.getPlayer(), titleId);
             msg(sender, "given-title");
             return true;
@@ -461,6 +509,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         if (action.equals("clear") && args.length >= 3) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
             setActiveTitle(target.getUniqueId(), getClearTargetTitleId());
+            saveData();
             if (target.isOnline()) runClearCommands(target.getPlayer());
             msg(sender, isMandatoryTitle() ? "title-reset-default" : "removed-title");
             return true;
@@ -503,13 +552,83 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     }
 
 
+    private boolean handleAdminHomesCommand(CommandSender sender, String[] args) {
+        if (playerHomesMenuManager == null || args.length < 3) {
+            sendAdminHomesHelp(sender);
+            return true;
+        }
+        String action = args[1].toLowerCase(Locale.ROOT);
+        if (action.equals("status") || action.equals("estado")) {
+            Player target = Bukkit.getPlayerExact(args[2]);
+            if (target == null) {
+                sender.sendMessage(color("&cEl jugador debe estar conectado para calcular su límite actual."));
+                return true;
+            }
+            List<String> locked = playerHomesMenuManager.getLockedHomeNames(target);
+            sender.sendMessage(color("&6Hogares de &e" + target.getName()));
+            sender.sendMessage(color("&7Límite actual: &e" + playerHomesMenuManager.getCurrentLimit(target)));
+            sender.sendMessage(color("&7Suspendidos: " + (locked.isEmpty() ? "&aNinguno" : "&c" + String.join("&7, &c", locked))));
+            return true;
+        }
+        if (action.equals("restore") || action.equals("restaurar") || action.equals("unlock")) {
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
+            int removed = playerHomesMenuManager.restorePersistentLocks(target.getUniqueId());
+            sender.sendMessage(color("&aSe limpiaron &e" + removed + " &abloqueos persistentes de &e" + (target.getName() == null ? args[2] : target.getName()) + "&a."));
+            return true;
+        }
+        sendAdminHomesHelp(sender);
+        return true;
+    }
+
+    private void sendAdminHomesHelp(CommandSender sender) {
+        sender.sendMessage(color("&6MDVSocial homes:"));
+        sender.sendMessage(color("&e/mdvsocial homes status <jugador> &7(muestra límite y hogares suspendidos)"));
+        sender.sendMessage(color("&e/mdvsocial homes restore <jugador> &7(limpia bloqueos persistentes cuando restore-on-upgrade es false)"));
+    }
+
+
     private boolean handleAdminMailCommand(CommandSender sender, String[] args) {
-        if (args.length < 3) {
+        if (args.length < 2) {
             sendAdminMailHelp(sender);
             return true;
         }
 
         String action = args[1].toLowerCase(Locale.ROOT);
+        if (action.equals("list") || action.equals("listar")) {
+            int page = args.length >= 3 ? Math.max(1, parsePage(args[2])) : 1;
+            listServerMailCampaigns(sender, page);
+            return true;
+        }
+        if (action.equals("view") || action.equals("ver")) {
+            if (args.length < 3) {
+                sendAdminMailHelp(sender);
+                return true;
+            }
+            viewServerMailCampaign(sender, args[2]);
+            return true;
+        }
+        if (action.equals("delete") || action.equals("eliminar") || action.equals("remove")) {
+            if (args.length < 3) {
+                sendAdminMailHelp(sender);
+                return true;
+            }
+            deleteServerMailCampaign(sender, args[2]);
+            return true;
+        }
+        if (action.equals("welcome-test") || action.equals("probar-bienvenida")) {
+            if (args.length < 3) {
+                sender.sendMessage(color("&cUso: /mdvsocial mail welcome-test <jugador>"));
+                return true;
+            }
+            Player target = Bukkit.getPlayerExact(args[2]);
+            if (target == null) {
+                msg(sender, "player-not-found");
+                return true;
+            }
+            sendWelcomeMail(target, true);
+            sender.sendMessage(color("&aCorreo de bienvenida de prueba enviado a &e" + target.getName() + "&a."));
+            return true;
+        }
         if (action.equals("sendall") || action.equals("broadcast")) {
             if (args.length < 3) {
                 sendAdminMailHelp(sender);
@@ -519,7 +638,6 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             sendServerMailAll(sender, message, getConfig().getLong("mail.server-mail-expire-days", 30L));
             return true;
         }
-
         if (action.equals("sendall-never") || action.equals("broadcast-never")) {
             if (args.length < 3) {
                 sendAdminMailHelp(sender);
@@ -529,7 +647,6 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             sendServerMailAll(sender, message, -1L);
             return true;
         }
-
         if (action.equals("sendall-days") || action.equals("broadcast-days")) {
             if (args.length < 4) {
                 sendAdminMailHelp(sender);
@@ -539,7 +656,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             try {
                 days = Long.parseLong(args[2]);
             } catch (Exception e) {
-                sender.sendMessage(color("&cLos dias deben ser un numero. Usa -1 para que no expire."));
+                sender.sendMessage(color("&cLos días deben ser un número. Usa -1 para que no expire."));
                 return true;
             }
             String message = String.join(" ", Arrays.copyOfRange(args, 3, args.length));
@@ -553,11 +670,14 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
 
     private void sendAdminMailHelp(CommandSender sender) {
         sender.sendMessage(color("&6MDVSocial mail:"));
-        sender.sendMessage(color("&e/mdvsocial mail sendall <mensaje> &7(envia como MDVCRAFT, duracion por config)"));
-        sender.sendMessage(color("&e/mdvsocial mail sendall-days <dias> <mensaje> &7(-1 = no expira)"));
+        sender.sendMessage(color("&e/mdvsocial mail list [página] &7(lista campañas activas)"));
+        sender.sendMessage(color("&e/mdvsocial mail view <id> &7(muestra el correo completo)"));
+        sender.sendMessage(color("&e/mdvsocial mail delete <id> &7(lo borra de todos los buzones)"));
+        sender.sendMessage(color("&e/mdvsocial mail sendall <mensaje> &7(duración por config)"));
+        sender.sendMessage(color("&e/mdvsocial mail sendall-days <días> <mensaje> &7(-1 = no expira)"));
         sender.sendMessage(color("&e/mdvsocial mail sendall-never <mensaje>"));
+        sender.sendMessage(color("&e/mdvsocial mail welcome-test <jugador>"));
     }
-
 
     private void ensureDefaultMenus() {
         File folder = new File(getDataFolder(), "Menus");
@@ -1784,9 +1904,11 @@ items:
             return;
         }
 
-        long expiresAt = expireDays <= 0 ? 0L : System.currentTimeMillis() + (expireDays * 24L * 60L * 60L * 1000L);
+        long sentAt = System.currentTimeMillis();
+        long expiresAt = expireDays <= 0 ? 0L : sentAt + (expireDays * 24L * 60L * 60L * 1000L);
         String author = getConfig().getString("mail.server-author-name", "MDVCRAFT");
         boolean ignoreLimit = getConfig().getBoolean("mail.server-mail-ignore-mailbox-limit", true);
+        String campaignId = createCampaignId();
         int sent = 0;
         int skipped = 0;
         for (OfflinePlayer target : Bukkit.getOfflinePlayers()) {
@@ -1799,25 +1921,186 @@ items:
                     continue;
                 }
             }
-            storeMail(target.getUniqueId(), target.getName() == null ? "jugador" : target.getName(), "", author, clean, expiresAt);
+            storeMail(target.getUniqueId(), target.getName() == null ? "jugador" : target.getName(), "", author, clean, expiresAt, sentAt, "SERVER_BROADCAST", campaignId);
             sent++;
         }
+        String registry = "broadcasts." + campaignId;
+        mailData.set(registry + ".author", author);
+        mailData.set(registry + ".message", clean);
+        mailData.set(registry + ".sent-at", sentAt);
+        mailData.set(registry + ".expires-at", expiresAt);
+        mailData.set(registry + ".recipients", sent);
+        mailData.set(registry + ".skipped", skipped);
         saveMailData();
-        msg(sender, "mail-broadcast-sent", Map.of("sent", String.valueOf(sent), "skipped", String.valueOf(skipped)));
+        msg(sender, "mail-broadcast-sent", Map.of("sent", String.valueOf(sent), "skipped", String.valueOf(skipped), "id", campaignId));
+    }
+
+    private String createCampaignId() {
+        String time = Long.toString(System.currentTimeMillis(), 36);
+        String random = UUID.randomUUID().toString().replace("-", "").substring(0, 6);
+        return time + "-" + random;
     }
 
     private String storeMail(UUID targetUuid, String toName, String fromUuid, String fromName, String message, long expiresAt) {
+        return storeMail(targetUuid, toName, fromUuid, fromName, message, expiresAt, System.currentTimeMillis(), "", "");
+    }
+
+    private String storeMail(UUID targetUuid, String toName, String fromUuid, String fromName, String message, long expiresAt, long sentAt, String type, String campaignId) {
         String id = UUID.randomUUID().toString();
-        long now = System.currentTimeMillis();
         String base = mailPath(targetUuid, "letters." + id);
         mailData.set(base + ".from-uuid", fromUuid == null ? "" : fromUuid);
         mailData.set(base + ".from-name", fromName == null || fromName.isBlank() ? "Desconocido" : fromName);
         mailData.set(base + ".to-name", toName == null ? "jugador" : toName);
         mailData.set(base + ".message", message);
-        mailData.set(base + ".sent-at", now);
+        mailData.set(base + ".sent-at", sentAt);
         mailData.set(base + ".expires-at", expiresAt);
         mailData.set(base + ".read", false);
+        if (type != null && !type.isBlank()) mailData.set(base + ".type", type);
+        if (campaignId != null && !campaignId.isBlank()) mailData.set(base + ".broadcast-id", campaignId);
         return id;
+    }
+
+    private void sendWelcomeMailIfNeeded(Player player, boolean firstJoin) {
+        if (player == null || !player.isOnline()) return;
+        if (!getConfig().getBoolean("mail.welcome.enabled", true)) return;
+        if (getConfig().getBoolean("mail.welcome.only-first-join", true) && !firstJoin) return;
+        sendWelcomeMail(player, false);
+    }
+
+    private void sendWelcomeMail(Player player, boolean force) {
+        if (player == null || !mailEnabled()) return;
+        String welcomeId = normalize(getConfig().getString("mail.welcome.id", "bienvenida-v1"));
+        if (welcomeId.isBlank()) welcomeId = "bienvenida-v1";
+        String marker = mailPath(player.getUniqueId(), "system.welcome-delivered." + welcomeId);
+        if (!force && mailData.getBoolean(marker, false)) return;
+
+        String message = sanitizeMailMessage(getConfig().getString("mail.welcome.message", "¡Bienvenido a MDVCRAFT! Revisa el menú social para descubrir tus sistemas de aventura."));
+        if (message.isBlank()) return;
+        int max = getMaxMailLength();
+        if (message.length() > max) message = message.substring(0, Math.max(1, max));
+        boolean ignoreLimit = getConfig().getBoolean("mail.welcome.ignore-mailbox-limit", true);
+        if (!ignoreLimit && getMailIds(player.getUniqueId()).size() >= getMailboxLimit(player)) return;
+
+        long sentAt = System.currentTimeMillis();
+        long days = Math.max(1L, getConfig().getLong("mail.welcome.expire-days", 3L));
+        long expiresAt = sentAt + days * 24L * 60L * 60L * 1000L;
+        String author = getConfig().getString("mail.welcome.author-name", getConfig().getString("mail.server-author-name", "MDVCRAFT"));
+        storeMail(player.getUniqueId(), player.getName(), "", author, message, expiresAt, sentAt, "WELCOME", "welcome-" + welcomeId);
+        if (!force) mailData.set(marker, true);
+        saveMailData();
+        msg(player, "mail-received", Map.of("sender", author));
+    }
+
+    private void listServerMailCampaigns(CommandSender sender, int requestedPage) {
+        List<ServerMailCampaign> campaigns = collectServerMailCampaigns();
+        int perPage = 8;
+        int maxPage = Math.max(1, (int) Math.ceil(campaigns.size() / (double) perPage));
+        int page = Math.max(1, Math.min(requestedPage, maxPage));
+        sender.sendMessage(color("&6Campañas de correo activas &7(" + page + "/" + maxPage + ")"));
+        if (campaigns.isEmpty()) {
+            sender.sendMessage(color("&7No hay correos globales activos."));
+            return;
+        }
+        int start = (page - 1) * perPage;
+        for (int i = start; i < Math.min(campaigns.size(), start + perPage); i++) {
+            ServerMailCampaign campaign = campaigns.get(i);
+            String expiry = campaign.expiresAt <= 0 ? "Nunca" : daysLeftText(campaign.expiresAt);
+            sender.sendMessage(color("&e" + campaign.id + " &7| &f" + campaign.author + " &7| &a" + campaign.recipients.size() + " buzones &7| &c" + expiry));
+            sender.sendMessage(color("  &8" + shorten(campaign.message, 72)));
+        }
+        sender.sendMessage(color("&7Usa &e/mdvsocial mail view <id> &7o &e/mdvsocial mail delete <id>&7."));
+    }
+
+    private void viewServerMailCampaign(CommandSender sender, String id) {
+        ServerMailCampaign campaign = findServerMailCampaign(id);
+        if (campaign == null) {
+            msg(sender, "mail-broadcast-not-found");
+            return;
+        }
+        sender.sendMessage(color("&6Correo global &e" + campaign.id));
+        sender.sendMessage(color("&7Autor: &f" + campaign.author));
+        sender.sendMessage(color("&7Enviado: &f" + formatTime(campaign.sentAt)));
+        sender.sendMessage(color("&7Expira: &f" + (campaign.expiresAt <= 0 ? "Nunca" : formatTime(campaign.expiresAt))));
+        sender.sendMessage(color("&7Buzones activos: &a" + campaign.recipients.size() + " &7(No leídos: &e" + campaign.unread + "&7)"));
+        sender.sendMessage(color("&7Mensaje: &f" + campaign.message));
+    }
+
+    private void deleteServerMailCampaign(CommandSender sender, String id) {
+        ServerMailCampaign campaign = findServerMailCampaign(id);
+        if (campaign == null) {
+            msg(sender, "mail-broadcast-not-found");
+            return;
+        }
+        int removed = 0;
+        ConfigurationSection mailboxes = mailData.getConfigurationSection("mailbox");
+        if (mailboxes != null) {
+            for (String uuidText : new ArrayList<>(mailboxes.getKeys(false))) {
+                ConfigurationSection letters = mailData.getConfigurationSection("mailbox." + uuidText + ".letters");
+                if (letters == null) continue;
+                for (String letterId : new ArrayList<>(letters.getKeys(false))) {
+                    String base = "mailbox." + uuidText + ".letters." + letterId;
+                    if (campaign.id.equalsIgnoreCase(effectiveCampaignId(base))) {
+                        mailData.set(base, null);
+                        removed++;
+                    }
+                }
+            }
+        }
+        mailData.set("broadcasts." + campaign.id, null);
+        saveMailData();
+        msg(sender, "mail-broadcast-deleted", Map.of("id", campaign.id, "removed", String.valueOf(removed)));
+    }
+
+    private ServerMailCampaign findServerMailCampaign(String id) {
+        if (id == null || id.isBlank()) return null;
+        return collectServerMailCampaigns().stream().filter(c -> c.id.equalsIgnoreCase(id)).findFirst().orElse(null);
+    }
+
+    private List<ServerMailCampaign> collectServerMailCampaigns() {
+        cleanupExpiredMail();
+        Map<String, ServerMailCampaign> campaigns = new LinkedHashMap<>();
+        ConfigurationSection mailboxes = mailData.getConfigurationSection("mailbox");
+        if (mailboxes == null) return new ArrayList<>();
+
+        for (String uuidText : mailboxes.getKeys(false)) {
+            UUID recipient;
+            try { recipient = UUID.fromString(uuidText); } catch (Exception ignored) { continue; }
+            ConfigurationSection letters = mailData.getConfigurationSection("mailbox." + uuidText + ".letters");
+            if (letters == null) continue;
+            for (String letterId : letters.getKeys(false)) {
+                String base = "mailbox." + uuidText + ".letters." + letterId;
+                String type = mailData.getString(base + ".type", "");
+                String fromUuid = mailData.getString(base + ".from-uuid", "");
+                boolean serverBroadcast = "SERVER_BROADCAST".equalsIgnoreCase(type)
+                        || (fromUuid.isBlank() && !"WELCOME".equalsIgnoreCase(type) && !"MDVCLANS_INVITE".equalsIgnoreCase(type));
+                if (!serverBroadcast) continue;
+
+                String campaignId = effectiveCampaignId(base);
+                String author = mailData.getString(base + ".from-name", "MDVCRAFT");
+                String message = mailData.getString(base + ".message", "");
+                long sentAt = mailData.getLong(base + ".sent-at", 0L);
+                long expiresAt = mailData.getLong(base + ".expires-at", 0L);
+                ServerMailCampaign campaign = campaigns.computeIfAbsent(campaignId, ignored -> new ServerMailCampaign(campaignId, author, message, sentAt, expiresAt));
+                campaign.recipients.add(recipient);
+                if (!mailData.getBoolean(base + ".read", false)) campaign.unread++;
+                if (campaign.sentAt <= 0 || (sentAt > 0 && sentAt < campaign.sentAt)) campaign.sentAt = sentAt;
+                if (campaign.expiresAt == 0 || expiresAt == 0) campaign.expiresAt = 0;
+                else campaign.expiresAt = Math.max(campaign.expiresAt, expiresAt);
+            }
+        }
+        List<ServerMailCampaign> out = new ArrayList<>(campaigns.values());
+        out.sort(Comparator.comparingLong((ServerMailCampaign campaign) -> campaign.sentAt).reversed());
+        return out;
+    }
+
+    private String effectiveCampaignId(String mailBase) {
+        String stored = mailData.getString(mailBase + ".broadcast-id", "");
+        if (!stored.isBlank()) return stored;
+        String author = mailData.getString(mailBase + ".from-name", "MDVCRAFT");
+        String message = mailData.getString(mailBase + ".message", "");
+        long sentMinute = mailData.getLong(mailBase + ".sent-at", 0L) / 60_000L;
+        long expiryMinute = mailData.getLong(mailBase + ".expires-at", 0L) / 60_000L;
+        return "legacy-" + Integer.toUnsignedString(Objects.hash(author, message, sentMinute, expiryMinute), 36);
     }
 
     public boolean sendClanInviteMail(UUID targetUuid, String targetName, UUID inviterUuid, String fromName, String clanTag, String clanName, String message, long expiresAt) {
@@ -2327,6 +2610,8 @@ items:
         sender.sendMessage(color("&e/mdvsocial title remove <jugador> <titulo>"));
         sender.sendMessage(color("&e/mdvsocial title set <jugador> <titulo>"));
         sender.sendMessage(color("&e/mdvsocial title clear <jugador>"));
+        sender.sendMessage(color("&e/mdvsocial title punish <jugador> [titulo_castigo]"));
+        sender.sendMessage(color("&e/mdvsocial title unpunish <jugador>"));
         sender.sendMessage(color("&e/mdvsocial title give-radius <radio> <titulo> &7(jugador)"));
         sender.sendMessage(color("&e/mdvsocial title give-near <world> <x> <y> <z> <radio> <titulo>"));
     }
@@ -2404,27 +2689,60 @@ items:
     }
 
     private void openRanks(Player player, int page) {
+        Map<Integer, Map<Integer, RankDef>> layout = buildRankLayout();
+        int maxPage = Math.max(0, layout.keySet().stream().max(Integer::compareTo).orElse(0));
+        page = Math.max(0, Math.min(page, maxPage));
+
         Inventory inv = createMenu("RANKS", getMenuSize("ranks"), getMenuTitle("ranks"), page);
         fill(inv);
-        List<RankDef> list = new ArrayList<>(ranks.values());
-        list.sort(Comparator.comparing(r -> stripColor(r.display)));
-        int perPage = listSlots.size();
-        int maxPage = Math.max(0, (int) Math.ceil(list.size() / (double) perPage) - 1);
-        page = Math.max(0, Math.min(page, maxPage));
         ((MenuHolder) inv.getHolder()).page = page;
 
-        int start = page * perPage;
-        for (int i = 0; i < perPage; i++) {
-            int index = start + i;
-            if (index >= list.size()) break;
-            int slot = listSlots.get(i);
-            if (slot >= 0 && slot < inv.getSize()) inv.setItem(slot, rankItem(player, list.get(index)));
+        Map<Integer, RankDef> currentPage = layout.getOrDefault(page, Collections.emptyMap());
+        for (Map.Entry<Integer, RankDef> entry : currentPage.entrySet()) {
+            int slot = entry.getKey();
+            if (slot >= 0 && slot < inv.getSize()) inv.setItem(slot, rankItem(player, entry.getValue()));
         }
+
         if (page > 0) inv.setItem(inv.getSize() - 9, navItem("previous-page", "PREV_PAGE"));
         inv.setItem(inv.getSize() - 5, navItem("back", "OPEN_TITLES_HOME"));
         if (page < maxPage) inv.setItem(inv.getSize() - 1, navItem("next-page", "NEXT_PAGE"));
         else inv.setItem(inv.getSize() - 1, navItem("close", "CLOSE"));
         player.openInventory(inv);
+    }
+
+    private Map<Integer, Map<Integer, RankDef>> buildRankLayout() {
+        Map<Integer, Map<Integer, RankDef>> layout = new LinkedHashMap<>();
+        List<RankDef> configured = ranks.values().stream()
+                .filter(rank -> rank.slot >= 0)
+                .sorted(Comparator.comparingInt((RankDef rank) -> rank.page).thenComparing(rank -> rank.id))
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<RankDef> automatic = ranks.values().stream()
+                .filter(rank -> rank.slot < 0)
+                .sorted(Comparator.comparing(rank -> stripColor(rank.display)))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        for (RankDef rank : configured) {
+            int page = Math.max(0, rank.page - 1);
+            Map<Integer, RankDef> pageLayout = layout.computeIfAbsent(page, ignored -> new LinkedHashMap<>());
+            if (pageLayout.putIfAbsent(rank.slot, rank) != null) {
+                getLogger().warning("Dos rangos intentan usar el slot " + rank.slot + " en la página " + rank.page + ". Se conserva el primero.");
+            }
+        }
+
+        int page = 0;
+        for (RankDef rank : automatic) {
+            while (true) {
+                Map<Integer, RankDef> pageLayout = layout.computeIfAbsent(page, ignored -> new LinkedHashMap<>());
+                Integer free = listSlots.stream().filter(slot -> !pageLayout.containsKey(slot)).findFirst().orElse(null);
+                if (free != null) {
+                    pageLayout.put(free, rank);
+                    break;
+                }
+                page++;
+            }
+        }
+        if (layout.isEmpty()) layout.put(0, new LinkedHashMap<>());
+        return layout;
     }
 
     private Inventory createMenu(String type, int size, String title, int page) {
@@ -2574,6 +2892,7 @@ items:
     private List<TitleDef> filteredTitles(Player player, String type) {
         List<TitleDef> out = new ArrayList<>();
         for (TitleDef title : titles.values()) {
+            if (title.punishment) continue;
             if (isHiddenTitle(title.id)) continue;
             boolean owned = hasTitle(player, title.id);
             if (type.equals("MY_TITLES") && owned) out.add(title);
@@ -2586,14 +2905,21 @@ items:
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        if (!getConfig().getBoolean("scoreboard-party-permission.enabled", true)) return;
         Player player = event.getPlayer();
+        boolean firstJoin = !player.hasPlayedBefore();
+
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (!player.isOnline()) return;
+            validateActiveTitle(player, true);
+            sendWelcomeMailIfNeeded(player, firstJoin);
+        }, 20L);
+        Bukkit.getScheduler().runTaskLater(this, () -> validateActiveTitle(player, true), 100L);
+
+        if (!getConfig().getBoolean("scoreboard-party-permission.enabled", true)) return;
         if (getConfig().getBoolean("scoreboard-party-permission.reset-on-join", true)) {
             setScoreboardPartyPermission(player, false);
         }
         Bukkit.getScheduler().runTaskLater(this, () -> syncScoreboardPartyPermission(player), 20L);
-        scheduleScoreboardRepair(player, 60L);
-        scheduleScoreboardRepair(player, 140L);
     }
 
     @EventHandler
@@ -2607,7 +2933,6 @@ items:
                 attachment.remove();
             } catch (Throwable ignored) { }
         }
-        scoreboardRepairLastAttempt.remove(player.getUniqueId());
     }
 
     private void syncAllScoreboardPartyPermissions() {
@@ -2641,33 +2966,6 @@ items:
 
         if (getConfig().getBoolean("scoreboard-party-permission.debug", false)) {
             getLogger().info("Scoreboard party permission: " + player.getName() + " -> " + permission + " = " + value);
-        }
-        scheduleScoreboardRepair(player, 20L);
-    }
-
-    private void scheduleScoreboardRepair(Player player, long delayTicks) {
-        if (player == null || !getConfig().getBoolean("scoreboard-repair.enabled", true)) return;
-        Bukkit.getScheduler().runTaskLater(this, () -> repairScoreboardIfMissing(player), Math.max(1L, delayTicks));
-    }
-
-    private void repairScoreboardIfMissing(Player player) {
-        if (player == null || !player.isOnline() || !getConfig().getBoolean("scoreboard-repair.enabled", true)) return;
-        Scoreboard board = player.getScoreboard();
-        boolean hasSidebar = board != null && board.getObjective(DisplaySlot.SIDEBAR) != null;
-        if (hasSidebar) return;
-
-        long cooldown = Math.max(1L, getConfig().getLong("scoreboard-repair.cooldown-seconds", 15L)) * 1000L;
-        long now = System.currentTimeMillis();
-        long last = scoreboardRepairLastAttempt.getOrDefault(player.getUniqueId(), 0L);
-        if (now - last < cooldown) return;
-        scoreboardRepairLastAttempt.put(player.getUniqueId(), now);
-
-        String command = getConfig().getString("scoreboard-repair.command", "animatedsb toggle {player}");
-        if (command == null || command.isBlank()) return;
-        command = command.replace("{player}", player.getName()).replace("%player%", player.getName());
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.startsWith("/") ? command.substring(1) : command);
-        if (getConfig().getBoolean("scoreboard-repair.debug", false)) {
-            getLogger().info("Reparación de scoreboard ejecutada para " + player.getName() + ": " + command);
         }
     }
 
@@ -3466,6 +3764,10 @@ items:
     }
 
     private void equipTitle(Player player, String titleId) {
+        if (isPunished(player.getUniqueId())) {
+            msg(player, "punishment-title-locked");
+            return;
+        }
         titleId = normalize(titleId);
         TitleDef title = titles.get(titleId);
         if (title == null) {
@@ -3487,6 +3789,10 @@ items:
     }
 
     private void clearActiveTitle(Player player) {
+        if (isPunished(player.getUniqueId())) {
+            msg(player, "punishment-title-locked");
+            return;
+        }
         if (!allowClearTitle()) {
             msg(player, "title-clear-disabled");
             return;
@@ -3519,11 +3825,105 @@ items:
         }
     }
 
+    private boolean isPunishmentSystemEnabled() {
+        return getConfig().getBoolean("punishment-titles.enabled", true);
+    }
+
+    private String getDefaultPunishmentTitleId() {
+        return normalize(getConfig().getString("punishment-titles.default-title", "pecador"));
+    }
+
+    private boolean isPunishmentTitle(String titleId) {
+        if (!isPunishmentSystemEnabled()) return false;
+        TitleDef title = titles.get(normalize(titleId));
+        return title != null && title.punishment;
+    }
+
+    private boolean isPunished(UUID uuid) {
+        return uuid != null && isPunishmentSystemEnabled() && data.getBoolean(path(uuid, "punishment.active"), false);
+    }
+
+    private String getPunishmentTitleId(UUID uuid) {
+        String titleId = normalize(data.getString(path(uuid, "punishment.title"), getDefaultPunishmentTitleId()));
+        return isPunishmentTitle(titleId) ? titleId : getDefaultPunishmentTitleId();
+    }
+
+    private void applyPunishmentTitle(OfflinePlayer target, String titleId) {
+        UUID uuid = target.getUniqueId();
+        titleId = normalize(titleId);
+        if (!isPunished(uuid)) {
+            data.set(path(uuid, "punishment.previous-title"), getStoredActiveTitleId(uuid));
+        }
+        data.set(path(uuid, "punishment.active"), true);
+        data.set(path(uuid, "punishment.title"), titleId);
+        if (target.getName() != null) data.set(path(uuid, "last-name"), target.getName());
+        saveData();
+        if (target.isOnline()) runEquipCommands(target.getPlayer(), titleId);
+    }
+
+    private void removePunishmentTitle(OfflinePlayer target) {
+        UUID uuid = target.getUniqueId();
+        String previous = normalize(data.getString(path(uuid, "punishment.previous-title"), ""));
+        data.set(path(uuid, "punishment"), null);
+        Player online = target.getPlayer();
+        String restored = previous;
+        if (online != null && (restored.isBlank() || !titles.containsKey(restored) || !hasTitle(online, restored))) {
+            restored = getInvalidTitleFallbackId();
+        }
+        if (restored.isBlank()) restored = getClearTargetTitleId();
+        setActiveTitle(uuid, restored);
+        saveData();
+        if (online != null) {
+            validateActiveTitle(online, false);
+            runEquipCommands(online, getActiveTitleId(uuid));
+        }
+    }
+
+    private String getInvalidTitleFallbackId() {
+        String fallback = normalize(getConfig().getString("settings.invalid-title-fallback", "aventurero"));
+        if (titles.containsKey(fallback)) return fallback;
+        String def = getDefaultTitleId();
+        return titles.containsKey(def) ? def : "";
+    }
+
+    private void validateActiveTitle(Player player, boolean notify) {
+        if (player == null || !player.isOnline()) return;
+        UUID uuid = player.getUniqueId();
+        if (isPunished(uuid)) {
+            String punishment = getPunishmentTitleId(uuid);
+            if (isPunishmentTitle(punishment)) return;
+            data.set(path(uuid, "punishment"), null);
+        }
+
+        String stored = getStoredActiveTitleId(uuid);
+        if (stored.isBlank()) return;
+        TitleDef current = titles.get(stored);
+        if (current != null && hasTitle(player, stored)) return;
+
+        String fallback = getInvalidTitleFallbackId();
+        if (!fallback.isBlank() && titles.containsKey(fallback)) {
+            setActiveTitle(uuid, fallback);
+            saveData();
+            runEquipCommands(player, fallback);
+            if (notify) msg(player, "title-invalid-reset", Map.of("title", color(titles.get(fallback).display)));
+        } else {
+            setActiveTitle(uuid, getClearTargetTitleId());
+            saveData();
+            if (notify) msg(player, "title-invalid-cleared");
+        }
+    }
+
+    private void validateAllOnlineTitles() {
+        if (!getConfig().getBoolean("settings.active-title-validation.enabled", true)) return;
+        for (Player player : Bukkit.getOnlinePlayers()) validateActiveTitle(player, true);
+    }
+
     public boolean hasTitle(Player player, String titleId) {
         titleId = normalize(titleId);
         if (player.hasPermission("mdvsocial.admin")) return true;
         TitleDef title = titles.get(titleId);
         if (title == null) return false;
+        if (title.punishment) return false;
         if (titleId.equals(getDefaultTitleId())) return true;
         if (getDefaultUnlockedTitles().contains(titleId)) return true;
         if (getUnlockedTitles(player.getUniqueId()).contains(titleId)) return true;
@@ -3544,7 +3944,7 @@ items:
         Set<String> set = getUnlockedTitles(uuid);
         set.remove(titleId);
         data.set(path(uuid, "unlocked"), new ArrayList<>(set));
-        if (getActiveTitleId(uuid).equals(titleId)) data.set(path(uuid, "active"), getClearTargetTitleId());
+        if (getStoredActiveTitleId(uuid).equals(titleId)) data.set(path(uuid, "active"), getInvalidTitleFallbackId());
         saveData();
     }
 
@@ -3553,8 +3953,17 @@ items:
         return list.stream().map(this::normalize).collect(Collectors.toCollection(HashSet::new));
     }
 
+    private String getStoredActiveTitleId(UUID uuid) {
+        return normalize(data.getString(path(uuid, "active"), ""));
+    }
+
     public String getActiveTitleId(UUID uuid) {
-        String active = normalize(data.getString(path(uuid, "active"), ""));
+        if (uuid == null) return "";
+        if (isPunished(uuid)) {
+            String punishment = getPunishmentTitleId(uuid);
+            if (titles.containsKey(punishment)) return punishment;
+        }
+        String active = getStoredActiveTitleId(uuid);
         if (active.isBlank() && isMandatoryTitle()) {
             String def = getDefaultTitleId();
             if (!def.isBlank() && titles.containsKey(def)) return def;
@@ -3567,10 +3976,13 @@ items:
     }
 
     public TitleDef getActiveTitle(Player player) {
+        if (player == null) return null;
+        validateActiveTitle(player, false);
         String id = getActiveTitleId(player.getUniqueId());
         if (id.isBlank()) return null;
         TitleDef title = titles.get(id);
         if (title == null) return null;
+        if (isPunished(player.getUniqueId())) return title;
         if (getConfig().getBoolean("settings.hide-invalid-active-title", true) && !hasTitle(player, id)) return null;
         return title;
     }
@@ -3711,20 +4123,26 @@ items:
         }
 
         if (!commandName.equals("mdvsocial")) return Collections.emptyList();
-        if (args.length == 1) return partial(args[0], Arrays.asList("reload", "open", "title", "mail"));
+        if (args.length == 1) return partial(args[0], Arrays.asList("reload", "open", "title", "mail", "homes"));
         if (args.length == 3 && args[0].equalsIgnoreCase("open")) {
             List<String> menus = new ArrayList<>(customMenus.keySet());
             menus.addAll(Arrays.asList("main", "titulos", "mis_titulos", "tienda", "rangos"));
             return partial(args[2], menus);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("mail")) {
-            return partial(args[1], Arrays.asList("sendall", "sendall-days", "sendall-never"));
+            return partial(args[1], Arrays.asList("list", "view", "delete", "sendall", "sendall-days", "sendall-never", "welcome-test"));
+        }
+        if (args.length == 2 && Arrays.asList("homes", "hogares", "casas").contains(args[0].toLowerCase(Locale.ROOT))) {
+            return partial(args[1], Arrays.asList("status", "restore"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("title")) {
-            return partial(args[1], Arrays.asList("give", "remove", "set", "clear", "give-radius", "give-near"));
+            return partial(args[1], Arrays.asList("give", "remove", "set", "clear", "punish", "unpunish", "give-radius", "give-near"));
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("title") && Arrays.asList("give", "remove", "set").contains(args[1].toLowerCase(Locale.ROOT))) {
             return partial(args[3], new ArrayList<>(titles.keySet()));
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("title") && Arrays.asList("punish", "castigar").contains(args[1].toLowerCase(Locale.ROOT))) {
+            return partial(args[3], titles.values().stream().filter(t -> t.punishment).map(t -> t.id).collect(Collectors.toList()));
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("title") && args[1].equalsIgnoreCase("give-radius")) {
             return partial(args[3], new ArrayList<>(titles.keySet()));
@@ -3891,6 +4309,25 @@ items:
     }
 
 
+    static final class ServerMailCampaign {
+        final String id;
+        String author;
+        String message;
+        long sentAt;
+        long expiresAt;
+        final Set<UUID> recipients = new HashSet<>();
+        int unread;
+
+        ServerMailCampaign(String id, String author, String message, long sentAt, long expiresAt) {
+            this.id = id;
+            this.author = author == null || author.isBlank() ? "MDVCRAFT" : author;
+            this.message = message == null ? "" : message;
+            this.sentAt = sentAt;
+            this.expiresAt = expiresAt;
+        }
+    }
+
+
     enum MailStage { RECIPIENT, MESSAGE, BLOCK, UNBLOCK }
 
     static final class MailComposeSession {
@@ -3929,9 +4366,10 @@ items:
         public final String unlockPermission;
         public final boolean hidden;
         public final boolean playerEquippable;
+        public final boolean punishment;
         public final List<String> lore;
 
-        TitleDef(String id, String display, String prefix, String material, String headOwner, String texture, boolean purchasable, double price, String unlockPermission, boolean hidden, boolean playerEquippable, List<String> lore) {
+        TitleDef(String id, String display, String prefix, String material, String headOwner, String texture, boolean purchasable, double price, String unlockPermission, boolean hidden, boolean playerEquippable, boolean punishment, List<String> lore) {
             this.id = id;
             this.display = display;
             this.prefix = prefix;
@@ -3943,6 +4381,7 @@ items:
             this.unlockPermission = unlockPermission;
             this.hidden = hidden;
             this.playerEquippable = playerEquippable;
+            this.punishment = punishment;
             this.lore = lore == null ? Collections.emptyList() : lore;
         }
     }
@@ -3952,12 +4391,16 @@ items:
         final String display;
         final String material;
         final String permission;
+        final int page;
+        final int slot;
         final List<String> lore;
-        RankDef(String id, String display, String material, String permission, List<String> lore) {
+        RankDef(String id, String display, String material, String permission, int page, int slot, List<String> lore) {
             this.id = id;
             this.display = display;
             this.material = material;
             this.permission = permission;
+            this.page = page;
+            this.slot = slot;
             this.lore = lore == null ? Collections.emptyList() : lore;
         }
     }

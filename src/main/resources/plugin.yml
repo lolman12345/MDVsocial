@@ -1,5 +1,5 @@
 name: MDVSocial
-version: 1.3.3
+version: 1.4.0
 main: com.mdvcraft.mdvsocial.MDVSocialPlugin
 api-version: '1.21'
 author: MDVCRAFT
@@ -52,3 +52,6 @@ permissions:
   mdvsocial.homes.use:
     description: Permite usar el menu de casas personales.
     default: true
+  mdvsocial.homes.lock.bypass:
+    description: Permite usar hogares suspendidos por superar el limite actual.
+    default: op

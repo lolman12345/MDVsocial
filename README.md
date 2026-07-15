@@ -1,8 +1,31 @@
-# MDVSocial 1.2.14
+# MDVSocial 1.4.0
 
 Actualización 1.2.11: añade el item fijo del menú social en el slot 8 de la hotbar, configurable desde `social-menu-item`.
 
 Plugin social modular para MDVCRAFT.
+
+## MDVSocial 1.4.0
+
+- Hogares excedentes suspendidos sin eliminar datos de EssentialsX.
+- Bloqueo directo de `/home`, `/ehome` y variantes `essentials:` para casas suspendidas.
+- Campañas de correo global listables y eliminables por ID.
+- Correo automático de bienvenida para jugadores nuevos.
+- Restablecimiento automático a `aventurero` cuando un título deja de estar desbloqueado.
+- Títulos obligatorios de castigo administrados por staff.
+- Posición de rangos configurable con `page` y `slot`.
+- Retirada la reparación de AnimatedScoreboard de 1.3.3.
+
+Comandos administrativos nuevos:
+
+- `/mdvsocial mail list [página]`
+- `/mdvsocial mail view <id>`
+- `/mdvsocial mail delete <id>`
+- `/mdvsocial mail welcome-test <jugador>`
+- `/mdvsocial title punish <jugador> [título]`
+- `/mdvsocial title unpunish <jugador>`
+- `/mdvsocial homes status <jugador>`
+- `/mdvsocial homes restore <jugador>`
+
 
 ## Incluye
 

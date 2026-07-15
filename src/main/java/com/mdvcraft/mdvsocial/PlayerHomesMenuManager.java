@@ -2,6 +2,7 @@ package com.mdvcraft.mdvsocial;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -19,6 +20,7 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemFlag;
@@ -27,37 +29,44 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.profile.PlayerTextures;
 
 import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Menu personal de hogares usando Essentials como backend.
+ * Menú personal de hogares usando EssentialsX como backend.
  *
- * MDVSocial solo muestra/ordena la interfaz y ejecuta /home, /sethome y /delhome
- * como jugador. Essentials conserva cooldowns, teleports, permisos y datos reales.
+ * El modo LOCK_EXCESS conserva todos los hogares de EssentialsX, pero suspende
+ * los que exceden el límite actual de MDVSocial. La selección se mantiene estable:
+ * primero preferred-home-names y luego el resto por nombre.
  */
 public final class PlayerHomesMenuManager implements Listener, CommandExecutor, TabCompleter {
 
     private static final String CONFIG_PATH = "homes-menu";
 
     private final MDVSocialPlugin plugin;
-    private org.bukkit.NamespacedKey keyAction;
-    private org.bukkit.NamespacedKey keyHomeName;
-    private org.bukkit.NamespacedKey keyHomeNumber;
+    private final org.bukkit.NamespacedKey keyAction;
+    private final org.bukkit.NamespacedKey keyHomeName;
+    private final org.bukkit.NamespacedKey keyHomeNumber;
 
     private boolean enabled;
     private String usePermission;
@@ -70,9 +79,22 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     private boolean closeOnAction;
     private int defaultMaxHomes;
 
+    private boolean lockExcessEnabled;
+    private String lockMode;
+    private boolean restoreOnUpgrade;
+    private boolean allowDeleteLocked;
+    private String lockBypassPermission;
+    private List<String> preferredHomeNames = new ArrayList<>();
+    private Set<String> interceptedHomeCommands = new HashSet<>();
+
     private String teleportCommand;
     private String setCommand;
     private String deleteCommand;
+
+    private File lockDataFile;
+    private YamlConfiguration lockData;
+    private boolean essentialsApiLogged;
+    private boolean essentialsApiFailureLogged;
 
     public PlayerHomesMenuManager(MDVSocialPlugin plugin) {
         this.plugin = plugin;
@@ -82,6 +104,7 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     }
 
     public void enable() {
+        loadLockData();
         reload();
         Bukkit.getPluginManager().registerEvents(this, plugin);
         PluginCommand command = plugin.getCommand("casa");
@@ -94,6 +117,7 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     }
 
     public void disable() {
+        saveLockData();
         HandlerList.unregisterAll(this);
     }
 
@@ -110,6 +134,26 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         closeOnAction = config.getBoolean(CONFIG_PATH + ".close-on-action", true);
         defaultMaxHomes = Math.max(0, config.getInt(CONFIG_PATH + ".max-homes.default", 1));
 
+        lockExcessEnabled = config.getBoolean(CONFIG_PATH + ".suspended-homes.enabled", true);
+        lockMode = config.getString(CONFIG_PATH + ".suspended-homes.mode", "LOCK_EXCESS");
+        restoreOnUpgrade = config.getBoolean(CONFIG_PATH + ".suspended-homes.restore-on-upgrade", true);
+        allowDeleteLocked = config.getBoolean(CONFIG_PATH + ".suspended-homes.allow-delete-locked", true);
+        lockBypassPermission = config.getString(CONFIG_PATH + ".suspended-homes.bypass-permission", "mdvsocial.homes.lock.bypass");
+        preferredHomeNames = config.getStringList(CONFIG_PATH + ".suspended-homes.preferred-home-names").stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(String::trim)
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (preferredHomeNames.isEmpty()) {
+            for (int i = 1; i <= maxVisibleHomes; i++) preferredHomeNames.add(generateHomeName(i));
+        }
+        interceptedHomeCommands = config.getStringList(CONFIG_PATH + ".suspended-homes.intercept-commands").stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(this::normalizeCommandLabel)
+                .collect(Collectors.toCollection(HashSet::new));
+        if (interceptedHomeCommands.isEmpty()) {
+            interceptedHomeCommands.addAll(List.of("home", "ehome", "essentials:home", "essentials:ehome"));
+        }
+
         teleportCommand = normalizeCommand(config.getString(CONFIG_PATH + ".commands.teleport", "home {home_name}"));
         setCommand = normalizeCommand(config.getString(CONFIG_PATH + ".commands.set", "sethome {home_name}"));
         deleteCommand = normalizeCommand(config.getString(CONFIG_PATH + ".commands.delete", "delhome {home_name}"));
@@ -122,11 +166,11 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
             return true;
         }
         if (!enabled) {
-            sendMessage(player, "disabled", "&cEl menu de casas esta desactivado.", Map.of());
+            sendMessage(player, "disabled", "&cEl menú de casas está desactivado.", Map.of());
             return true;
         }
         if (usePermission != null && !usePermission.isBlank() && !player.hasPermission(usePermission)) {
-            sendMessage(player, "no-permission", "&cNo tienes permiso para usar este menu.", Map.of());
+            sendMessage(player, "no-permission", "&cNo tienes permiso para usar este menú.", Map.of());
             return true;
         }
         openHomesMenu(player);
@@ -141,32 +185,44 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     private void openHomesMenu(Player player) {
         List<HomeData> homes = readHomes(player);
         int maxHomes = getMaxHomes(player);
-        Inventory inv = Bukkit.createInventory(new HomesHolder(), size, color(applyGlobalPlaceholders(title, player, homes, maxHomes)));
-        fill(inv, player, homes, maxHomes);
+        Set<String> lockedNames = syncLockedHomes(player, homes, maxHomes);
+        List<HomeData> displayedHomes = homes.stream()
+                .map(home -> home.withLocked(lockedNames.contains(normalizeHomeName(home.name))))
+                .collect(Collectors.toCollection(ArrayList::new));
 
-        inv.setItem(slot("items.info.slot", 13), itemFromPath("items.info", "INFO", null, 0, player, homes, maxHomes));
+        Inventory inv = Bukkit.createInventory(new HomesHolder(), size, color(applyGlobalPlaceholders(title, player, displayedHomes, maxHomes)));
+        fill(inv, player, displayedHomes, maxHomes);
+        inv.setItem(slot("items.info.slot", 13), itemFromPath("items.info", "INFO", null, 0, player, displayedHomes, maxHomes));
 
         for (int i = 1; i <= maxVisibleHomes; i++) {
-            HomeData home = i <= homes.size() ? homes.get(i - 1) : null;
-            boolean unlocked = i <= maxHomes;
+            HomeData home = i <= displayedHomes.size() ? displayedHomes.get(i - 1) : null;
+            boolean slotWithinLimit = i <= maxHomes;
             int teleportSlot = slot("items.teleport.slot-" + i, defaultTeleportSlot(i));
             int setSlot = slot("items.set.slot-" + i, defaultSetSlot(i));
 
-            if (!unlocked) {
-                inv.setItem(teleportSlot, itemFromPath("items.teleport.locked", "LOCKED", null, i, player, homes, maxHomes));
-                inv.setItem(setSlot, itemFromPath("items.set.locked", "LOCKED", null, i, player, homes, maxHomes));
+            if (home != null && home.locked) {
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.locked", "LOCKED_HOME", home, i, player, displayedHomes, maxHomes));
+                String lockedAction = allowDeleteLocked ? "DELETE_LOCKED_HOME" : "LOCKED_HOME";
+                inv.setItem(setSlot, itemFromPath("items.set.locked", lockedAction, home, i, player, displayedHomes, maxHomes));
+                continue;
+            }
+
+            if (!slotWithinLimit) {
+                HomeData lockedSlot = HomeData.missing(generateHomeName(i)).withLocked(true);
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.locked", "LOCKED_HOME", lockedSlot, i, player, displayedHomes, maxHomes));
+                inv.setItem(setSlot, itemFromPath("items.set.locked", "LOCKED_HOME", lockedSlot, i, player, displayedHomes, maxHomes));
                 continue;
             }
 
             if (home == null) {
                 String generatedName = generateHomeName(i);
                 HomeData missingHome = HomeData.missing(generatedName);
-                inv.setItem(teleportSlot, itemFromPath("items.teleport.missing", "MISSING", missingHome, i, player, homes, maxHomes));
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.missing", "MISSING", missingHome, i, player, displayedHomes, maxHomes));
                 String setMissingPath = section("items.set.missing") != null || section("set.missing") != null ? "items.set.missing" : "items.set.available";
-                inv.setItem(setSlot, itemFromPath(setMissingPath, "SET_HOME", missingHome, i, player, homes, maxHomes));
+                inv.setItem(setSlot, itemFromPath(setMissingPath, "SET_HOME", missingHome, i, player, displayedHomes, maxHomes));
             } else {
-                inv.setItem(teleportSlot, itemFromPath("items.teleport.available", "TELEPORT_HOME", home, i, player, homes, maxHomes));
-                inv.setItem(setSlot, itemFromPath("items.set.available", "SET_HOME", home, i, player, homes, maxHomes));
+                inv.setItem(teleportSlot, itemFromPath("items.teleport.available", "TELEPORT_HOME", home, i, player, displayedHomes, maxHomes));
+                inv.setItem(setSlot, itemFromPath("items.set.available", "SET_HOME", home, i, player, displayedHomes, maxHomes));
             }
         }
 
@@ -174,7 +230,7 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         if (back == null || back.getBoolean("enabled", true)) {
             int backSlot = slot("items.back.slot", Math.min(size - 5, 49));
             if (backSlot >= 0 && backSlot < size) {
-                inv.setItem(backSlot, itemFromPath("items.back", "BACK", null, 0, player, homes, maxHomes));
+                inv.setItem(backSlot, itemFromPath("items.back", "BACK", null, 0, player, displayedHomes, maxHomes));
             }
         }
 
@@ -199,25 +255,115 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         if (homeNumber == null) homeNumber = 0;
 
         switch (action) {
-            case "TELEPORT_HOME" -> runHomeCommand(player, teleportCommand, homeName, homeNumber, true);
+            case "TELEPORT_HOME" -> {
+                if (isHomeLocked(player, homeName)) {
+                    sendLockedMessage(player, homeName, homeNumber);
+                    return;
+                }
+                runHomeCommand(player, teleportCommand, homeName, homeNumber, true);
+            }
             case "SET_HOME" -> {
                 if (isDeleteClick(event.getClick())) {
                     if (homeExists(player, homeName)) {
                         runHomeCommand(player, deleteCommand, homeName, homeNumber, true);
                     } else {
-                        sendMessage(player, "home-not-set", "&cEse hogar aun no esta establecido.", Map.of("home", safe(homeName), "number", String.valueOf(homeNumber)));
+                        sendMessage(player, "home-not-set", "&cEse hogar aún no está establecido.", Map.of("home", safe(homeName), "number", String.valueOf(homeNumber)));
                     }
                 } else {
                     runHomeCommand(player, setCommand, homeName, homeNumber, true);
                 }
             }
+            case "DELETE_LOCKED_HOME" -> {
+                if (!allowDeleteLocked) {
+                    sendLockedMessage(player, homeName, homeNumber);
+                } else if (!isDeleteClick(event.getClick())) {
+                    sendMessage(player, "locked-delete-hint", "&eUsa click derecho para eliminar el hogar suspendido &6{home}&e.", Map.of("home", safe(homeName), "number", String.valueOf(homeNumber)));
+                } else if (homeExists(player, homeName)) {
+                    runHomeCommand(player, deleteCommand, homeName, homeNumber, true);
+                } else {
+                    sendMessage(player, "home-not-set", "&cEse hogar aún no está establecido.", Map.of("home", safe(homeName), "number", String.valueOf(homeNumber)));
+                }
+            }
+            case "LOCKED_HOME" -> sendLockedMessage(player, homeName, homeNumber);
             case "BACK" -> {
                 if (closeOnAction) player.closeInventory();
-                String command = normalizeCommand(sectionString("items.back.command", "social"));
-                Bukkit.getScheduler().runTask(plugin, () -> Bukkit.dispatchCommand(player, command));
+                String backCommand = normalizeCommand(sectionString("items.back.command", "social"));
+                Bukkit.getScheduler().runTask(plugin, () -> Bukkit.dispatchCommand(player, backCommand));
             }
             default -> { }
         }
+    }
+
+    /**
+     * Bloquea también /home, /ehome y las variantes con namespace de EssentialsX.
+     * Se usa el evento de comandos porque EssentialsX no expone un evento específico
+     * cancelable para seleccionar un hogar antes de iniciar todos sus flujos de teleport.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onHomeCommand(PlayerCommandPreprocessEvent event) {
+        if (!isLockExcessActive()) return;
+        Player player = event.getPlayer();
+        if (hasLockBypass(player)) return;
+
+        String raw = event.getMessage();
+        if (raw == null || raw.length() < 2) return;
+        String withoutSlash = raw.substring(1).trim();
+        if (withoutSlash.isEmpty()) return;
+        String[] parts = withoutSlash.split("\\s+", 2);
+        String label = normalizeCommandLabel(parts[0]);
+        if (!interceptedHomeCommands.contains(label)) return;
+
+        List<HomeData> homes = readHomes(player);
+        int maxHomes = getMaxHomes(player);
+        Set<String> locked = syncLockedHomes(player, homes, maxHomes);
+        if (homes.isEmpty()) return; // Conserva spawn-if-no-home de EssentialsX.
+
+        if (parts.length == 1 || parts[1].isBlank()) {
+            HomeData firstActive = homes.stream()
+                    .filter(home -> !locked.contains(normalizeHomeName(home.name)))
+                    .findFirst()
+                    .orElse(null);
+            if (firstActive == null) {
+                event.setCancelled(true);
+                sendMessage(player, "all-homes-locked", "&cTodos tus hogares están suspendidos. Recupera un límite mayor o elimina uno.", Map.of("max_homes", String.valueOf(maxHomes)));
+                return;
+            }
+            event.setMessage("/" + parts[0] + " " + firstActive.name);
+            return;
+        }
+
+        String requested = stripQuotes(parts[1].trim());
+        int colon = requested.indexOf(':');
+        if (colon >= 0) {
+            String owner = requested.substring(0, colon);
+            if (!owner.equalsIgnoreCase(player.getName())) return;
+            requested = requested.substring(colon + 1);
+        }
+        HomeData matched = findHome(homes, requested);
+        if (matched == null) return;
+        if (!locked.contains(normalizeHomeName(matched.name))) return;
+
+        event.setCancelled(true);
+        sendLockedMessage(player, matched.name, Math.max(1, homes.indexOf(matched) + 1));
+    }
+
+    public int restorePersistentLocks(UUID uuid) {
+        if (uuid == null || lockData == null) return 0;
+        List<String> before = lockData.getStringList(lockPath(uuid));
+        lockData.set(lockPath(uuid), null);
+        saveLockData();
+        return before.size();
+    }
+
+    public List<String> getLockedHomeNames(Player player) {
+        if (player == null) return Collections.emptyList();
+        List<HomeData> homes = readHomes(player);
+        Set<String> locked = syncLockedHomes(player, homes, getMaxHomes(player));
+        return homes.stream().filter(h -> locked.contains(normalizeHomeName(h.name))).map(h -> h.name).collect(Collectors.toList());
+    }
+
+    public int getCurrentLimit(Player player) {
+        return getMaxHomes(player);
     }
 
     private boolean isDeleteClick(ClickType click) {
@@ -226,7 +372,11 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
 
     private void runHomeCommand(Player player, String commandTemplate, String homeName, int homeNumber, boolean requireName) {
         if (requireName && (homeName == null || homeName.isBlank())) {
-            sendMessage(player, "home-not-set", "&cEse hogar aun no esta establecido.", Map.of("home", "", "number", String.valueOf(homeNumber)));
+            sendMessage(player, "home-not-set", "&cEse hogar aún no está establecido.", Map.of("home", "", "number", String.valueOf(homeNumber)));
+            return;
+        }
+        if (commandTemplate.equalsIgnoreCase(teleportCommand) && isHomeLocked(player, homeName)) {
+            sendLockedMessage(player, homeName, homeNumber);
             return;
         }
         if (closeOnAction) player.closeInventory();
@@ -241,14 +391,122 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     }
 
     private boolean homeExists(Player player, String homeName) {
-        if (homeName == null || homeName.isBlank()) return false;
-        for (HomeData home : readHomes(player)) {
-            if (home.name.equalsIgnoreCase(homeName)) return true;
+        return findHome(readHomes(player), homeName) != null;
+    }
+
+    private HomeData findHome(List<HomeData> homes, String homeName) {
+        if (homeName == null || homeName.isBlank()) return null;
+        for (HomeData home : homes) {
+            if (home.name.equalsIgnoreCase(homeName)) return home;
         }
-        return false;
+        return null;
+    }
+
+    private boolean isHomeLocked(Player player, String homeName) {
+        if (!isLockExcessActive() || hasLockBypass(player) || homeName == null || homeName.isBlank()) return false;
+        List<HomeData> homes = readHomes(player);
+        Set<String> locked = syncLockedHomes(player, homes, getMaxHomes(player));
+        return locked.contains(normalizeHomeName(homeName));
+    }
+
+    private void sendLockedMessage(Player player, String homeName, int homeNumber) {
+        sendMessage(player, "home-suspended", "&cEl hogar &e{home} &cestá suspendido porque supera tu límite actual de &e{max_homes}&c.", Map.of(
+                "home", safe(homeName),
+                "number", String.valueOf(homeNumber),
+                "max_homes", String.valueOf(getMaxHomes(player))
+        ));
+    }
+
+    private boolean isLockExcessActive() {
+        return enabled && lockExcessEnabled && "LOCK_EXCESS".equalsIgnoreCase(lockMode);
+    }
+
+    private boolean hasLockBypass(Player player) {
+        return player != null && lockBypassPermission != null && !lockBypassPermission.isBlank() && player.hasPermission(lockBypassPermission);
+    }
+
+    private Set<String> syncLockedHomes(Player player, List<HomeData> homes, int maxHomes) {
+        if (!isLockExcessActive() || hasLockBypass(player)) return Collections.emptySet();
+
+        Set<String> existing = homes.stream().map(h -> normalizeHomeName(h.name)).collect(Collectors.toCollection(HashSet::new));
+        Set<String> dynamicExcess = new HashSet<>();
+        for (int i = Math.max(0, maxHomes); i < homes.size(); i++) {
+            dynamicExcess.add(normalizeHomeName(homes.get(i).name));
+        }
+
+        Set<String> locked = new HashSet<>(dynamicExcess);
+        if (!restoreOnUpgrade && lockData != null) {
+            locked.addAll(lockData.getStringList(lockPath(player.getUniqueId())).stream().map(this::normalizeHomeName).collect(Collectors.toSet()));
+        }
+        locked.retainAll(existing);
+        persistLockedHomes(player.getUniqueId(), locked);
+        return locked;
+    }
+
+    private void persistLockedHomes(UUID uuid, Set<String> locked) {
+        if (lockData == null || uuid == null) return;
+        List<String> sorted = new ArrayList<>(locked);
+        sorted.sort(String.CASE_INSENSITIVE_ORDER);
+        List<String> old = lockData.getStringList(lockPath(uuid));
+        if (old.equals(sorted)) return;
+        if (sorted.isEmpty()) lockData.set(lockPath(uuid), null);
+        else lockData.set(lockPath(uuid), sorted);
+        saveLockData();
     }
 
     private List<HomeData> readHomes(Player player) {
+        List<HomeData> apiHomes = readHomesFromEssentialsApi(player);
+        List<HomeData> out = apiHomes != null ? apiHomes : readHomesFromYaml(player);
+        if (isLockExcessActive()) {
+            sortHomesStable(out);
+        } else if (sortHomesByName) {
+            out.sort(Comparator.comparing(h -> h.name.toLowerCase(Locale.ROOT)));
+        }
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<HomeData> readHomesFromEssentialsApi(Player player) {
+        Plugin essentials = Bukkit.getPluginManager().getPlugin("Essentials");
+        if (essentials == null || !essentials.isEnabled()) return null;
+        try {
+            Method getUser = essentials.getClass().getMethod("getUser", UUID.class);
+            Object user = getUser.invoke(essentials, player.getUniqueId());
+            if (user == null) return null;
+            Method getHomes = user.getClass().getMethod("getHomes");
+            Object rawHomes = getHomes.invoke(user);
+            if (!(rawHomes instanceof Collection<?> names)) return null;
+
+            Method getHome = user.getClass().getMethod("getHome", String.class);
+            List<HomeData> out = new ArrayList<>();
+            for (Object rawName : names) {
+                String name = String.valueOf(rawName);
+                try {
+                    Object rawLocation = getHome.invoke(user, name);
+                    if (rawLocation instanceof Location loc) {
+                        out.add(new HomeData(name, loc.getWorld() == null ? "world" : loc.getWorld().getName(), loc.getX(), loc.getY(), loc.getZ(), true, false));
+                    } else {
+                        out.add(new HomeData(name, "world", 0, 0, 0, true, false));
+                    }
+                } catch (Throwable ignored) {
+                    out.add(new HomeData(name, "world", 0, 0, 0, true, false));
+                }
+            }
+            if (!essentialsApiLogged) {
+                plugin.getLogger().info("Integración de hogares conectada a la API de EssentialsX.");
+                essentialsApiLogged = true;
+            }
+            return out;
+        } catch (Throwable ex) {
+            if (!essentialsApiFailureLogged) {
+                plugin.getLogger().warning("No se pudo leer la API de hogares de EssentialsX; se usará userdata como respaldo: " + ex.getClass().getSimpleName());
+                essentialsApiFailureLogged = true;
+            }
+            return null;
+        }
+    }
+
+    private List<HomeData> readHomesFromYaml(Player player) {
         File file = new File(resolveUserdataFolder(), player.getUniqueId().toString() + ".yml");
         if (!file.exists()) return new ArrayList<>();
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
@@ -265,7 +523,8 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
                         homeSec.getDouble("x", homeSec.getDouble("loc.x", 0)),
                         homeSec.getDouble("y", homeSec.getDouble("loc.y", 0)),
                         homeSec.getDouble("z", homeSec.getDouble("loc.z", 0)),
-                        true
+                        true,
+                        false
                 ));
                 continue;
             }
@@ -274,18 +533,28 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
             HomeData parsed = parseLegacyHome(name, raw);
             if (parsed != null) out.add(parsed);
         }
-        if (sortHomesByName) out.sort(Comparator.comparing(h -> h.name.toLowerCase(Locale.ROOT)));
         return out;
+    }
+
+    private void sortHomesStable(List<HomeData> homes) {
+        Map<String, Integer> preferredOrder = new HashMap<>();
+        for (int i = 0; i < preferredHomeNames.size(); i++) {
+            preferredOrder.putIfAbsent(normalizeHomeName(preferredHomeNames.get(i)), i);
+        }
+        homes.sort(Comparator
+                .comparingInt((HomeData home) -> preferredOrder.getOrDefault(normalizeHomeName(home.name), Integer.MAX_VALUE))
+                .thenComparing(home -> home.name.toLowerCase(Locale.ROOT))
+                .thenComparing(home -> home.name));
     }
 
     private HomeData parseLegacyHome(String name, String raw) {
         if (raw == null || raw.isBlank()) return null;
         String[] parts = raw.split(",");
-        if (parts.length < 4) return new HomeData(name, "world", 0, 0, 0, true);
+        if (parts.length < 4) return new HomeData(name, "world", 0, 0, 0, true, false);
         try {
-            return new HomeData(name, parts[0].trim(), Double.parseDouble(parts[1].trim()), Double.parseDouble(parts[2].trim()), Double.parseDouble(parts[3].trim()), true);
+            return new HomeData(name, parts[0].trim(), Double.parseDouble(parts[1].trim()), Double.parseDouble(parts[2].trim()), Double.parseDouble(parts[3].trim()), true, false);
         } catch (Exception ignored) {
-            return new HomeData(name, "world", 0, 0, 0, true);
+            return new HomeData(name, "world", 0, 0, 0, true, false);
         }
     }
 
@@ -298,7 +567,6 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
 
     private int getMaxHomes(Player player) {
         int max = defaultMaxHomes;
-
         List<Map<?, ?>> list = plugin.getConfig().getMapList(CONFIG_PATH + ".max-homes.permission-limits");
         for (Map<?, ?> entry : list) {
             Object permObj = entry.get("permission");
@@ -316,7 +584,6 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
                 if (homes > max && player.hasPermission(key)) max = homes;
             }
         }
-
         return Math.max(0, Math.min(maxVisibleHomes, max));
     }
 
@@ -347,8 +614,7 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
                 String owner = sec.getString("head-owner", "");
                 if (owner != null && !owner.isBlank()) {
                     owner = applyPlaceholders(owner, player, home, number, homes, maxHomes);
-                    OfflinePlayer offline = Bukkit.getOfflinePlayer(owner);
-                    skull.setOwningPlayer(offline);
+                    skull.setOwningPlayer(Bukkit.getOfflinePlayer(owner));
                 }
             }
             meta = skull;
@@ -356,7 +622,6 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
 
         String name = sec == null ? "" : sec.getString("name", "");
         if (name != null && !name.isBlank()) meta.setDisplayName(color(applyPlaceholders(name, player, home, number, homes, maxHomes)));
-
         List<String> lore = sec == null ? Collections.emptyList() : sec.getStringList("lore");
         if (!lore.isEmpty()) {
             meta.setLore(lore.stream().map(line -> color(applyPlaceholders(line, player, home, number, homes, maxHomes))).collect(Collectors.toList()));
@@ -371,10 +636,14 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     }
 
     private String applyGlobalPlaceholders(String input, Player player, List<HomeData> homes, int maxHomes) {
+        long locked = homes.stream().filter(h -> h.exists && h.locked).count();
+        long active = homes.stream().filter(h -> h.exists && !h.locked).count();
         return safe(input)
                 .replace("{player}", player.getName())
                 .replace("{homes}", String.valueOf(homes.size()))
                 .replace("{home_count}", String.valueOf(homes.size()))
+                .replace("{active_homes}", String.valueOf(active))
+                .replace("{locked_homes}", String.valueOf(locked))
                 .replace("{max_homes}", String.valueOf(maxHomes))
                 .replace("{max_visible_homes}", String.valueOf(maxVisibleHomes));
     }
@@ -385,13 +654,17 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         int currentX = player.getLocation().getBlockX();
         int currentY = player.getLocation().getBlockY();
         int currentZ = player.getLocation().getBlockZ();
+        String status = home.locked
+                ? color(sectionString("status-text.suspended", "&cSuspendida"))
+                : (home.exists ? color(sectionString("status-text.established", "&aEstablecida")) : color(sectionString("status-text.missing", "&cNo establecida")));
 
         return applyGlobalPlaceholders(input, player, homes, maxHomes)
                 .replace("{home_number}", String.valueOf(number))
                 .replace("{home_name}", home.name)
                 .replace("{home_display}", home.name)
                 .replace("{home}", home.name)
-                .replace("{home_status}", home.exists ? color(sectionString("status-text.established", "&aEstablecida")) : color(sectionString("status-text.missing", "&cNo establecida")))
+                .replace("{home_status}", status)
+                .replace("{home_locked}", String.valueOf(home.locked))
                 .replace("{home_world}", home.world)
                 .replace("{home_x}", home.exists ? String.valueOf((int) Math.floor(home.x)) : "-")
                 .replace("{home_y}", home.exists ? String.valueOf((int) Math.floor(home.y)) : "-")
@@ -428,15 +701,14 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
     }
 
     private int normalizeMenuSize(int value) {
-        int size = Math.max(9, Math.min(54, value));
-        if (size % 9 != 0) size = ((size / 9) + 1) * 9;
-        return size;
+        int normalized = Math.max(9, Math.min(54, value));
+        if (normalized % 9 != 0) normalized = ((normalized / 9) + 1) * 9;
+        return normalized;
     }
 
     private ConfigurationSection section(String relativePath) {
         ConfigurationSection sec = plugin.getConfig().getConfigurationSection(CONFIG_PATH + "." + relativePath);
         if (sec != null) return sec;
-        // Compatibilidad: algunas configs antiguas dejaron teleport/set/back fuera de items.
         if (relativePath != null && relativePath.startsWith("items.")) {
             return plugin.getConfig().getConfigurationSection(CONFIG_PATH + "." + relativePath.substring("items.".length()));
         }
@@ -460,6 +732,22 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         return out;
     }
 
+    private String normalizeCommandLabel(String raw) {
+        String out = normalizeCommand(raw).toLowerCase(Locale.ROOT);
+        return out.endsWith(":") ? out.substring(0, out.length() - 1) : out;
+    }
+
+    private String normalizeHomeName(String raw) {
+        return stripQuotes(safe(raw).trim()).toLowerCase(Locale.ROOT);
+    }
+
+    private String stripQuotes(String raw) {
+        if (raw == null || raw.length() < 2) return raw == null ? "" : raw;
+        if ((raw.startsWith("\"") && raw.endsWith("\"")) || (raw.startsWith("'") && raw.endsWith("'"))) {
+            return raw.substring(1, raw.length() - 1);
+        }
+        return raw;
+    }
 
     private String readTexture(ConfigurationSection sec) {
         if (sec == null) return "";
@@ -482,9 +770,9 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
             if (urlKey < 0) return "";
             int colon = decoded.indexOf(':', urlKey);
             if (colon < 0) return "";
-            int firstQuote = decoded.indexOf('\"', colon);
+            int firstQuote = decoded.indexOf('"', colon);
             if (firstQuote < 0) return "";
-            int secondQuote = decoded.indexOf('\"', firstQuote + 1);
+            int secondQuote = decoded.indexOf('"', firstQuote + 1);
             if (secondQuote < 0) return "";
             return decoded.substring(firstQuote + 1, secondQuote).replace("\\/", "/");
         } catch (Throwable ignored) {
@@ -497,7 +785,7 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         String textureUrl = extractTextureUrl(textureValue.trim());
         if (textureUrl == null || textureUrl.isBlank()) return;
         try {
-            PlayerProfile profile = Bukkit.createPlayerProfile(java.util.UUID.randomUUID(), "MDVHome");
+            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID(), "MDVHome");
             PlayerTextures textures = profile.getTextures();
             textures.setSkin(new URL(textureUrl));
             profile.setTextures(textures);
@@ -525,6 +813,25 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         return text == null ? "" : text;
     }
 
+    private void loadLockData() {
+        if (!plugin.getDataFolder().exists()) plugin.getDataFolder().mkdirs();
+        lockDataFile = new File(plugin.getDataFolder(), "homes-lock-data.yml");
+        lockData = YamlConfiguration.loadConfiguration(lockDataFile);
+    }
+
+    private void saveLockData() {
+        if (lockData == null || lockDataFile == null) return;
+        try {
+            lockData.save(lockDataFile);
+        } catch (IOException ex) {
+            plugin.getLogger().warning("No se pudo guardar homes-lock-data.yml: " + ex.getMessage());
+        }
+    }
+
+    private String lockPath(UUID uuid) {
+        return "players." + uuid + ".locked";
+    }
+
     private static final class HomeData {
         final String name;
         final String world;
@@ -532,18 +839,24 @@ public final class PlayerHomesMenuManager implements Listener, CommandExecutor, 
         final double y;
         final double z;
         final boolean exists;
+        final boolean locked;
 
-        HomeData(String name, String world, double x, double y, double z, boolean exists) {
+        HomeData(String name, String world, double x, double y, double z, boolean exists, boolean locked) {
             this.name = name == null ? "" : name;
             this.world = world == null || world.isBlank() ? "world" : world;
             this.x = x;
             this.y = y;
             this.z = z;
             this.exists = exists;
+            this.locked = locked;
+        }
+
+        HomeData withLocked(boolean locked) {
+            return new HomeData(name, world, x, y, z, exists, locked);
         }
 
         static HomeData missing(String name) {
-            return new HomeData(name, "-", 0, 0, 0, false);
+            return new HomeData(name, "-", 0, 0, 0, false, false);
         }
     }
 

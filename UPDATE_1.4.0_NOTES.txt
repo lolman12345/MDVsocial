@@ -1,0 +1,57 @@
+MDVSocial 1.4.0
+================
+
+NOVEDADES
+
+1. Hogares suspendidos (LOCK_EXCESS)
+- Conserva los hogares de EssentialsX cuando un jugador pierde un rango.
+- Usa el limite actual de homes-menu.max-homes.
+- Mantiene activos los hogares que entran dentro del limite.
+- Los hogares excedentes siguen visibles, pero quedan suspendidos.
+- Bloquea /home, /ehome, /essentials:home y /essentials:ehome para hogares suspendidos.
+- Permite eliminar hogares suspendidos desde el menu con click derecho.
+- Los restaura automaticamente al recuperar el permiso cuando restore-on-upgrade es true.
+- Orden estable: preferred-home-names y luego nombres alfabeticos.
+- Usa la API de EssentialsX por reflexion y userdata como respaldo.
+- Datos persistentes opcionales: homes-lock-data.yml.
+
+Comandos de diagnostico:
+- /mdvsocial homes status <jugador>
+- /mdvsocial homes restore <jugador>
+
+2. Campañas de correo global
+- Cada /mdvsocial mail sendall genera un ID de campaña.
+- /mdvsocial mail list [pagina]
+- /mdvsocial mail view <id>
+- /mdvsocial mail delete <id>
+- La eliminacion recorre todos los buzones, incluso jugadores desconectados.
+- Los correos globales antiguos sin ID se agrupan con un ID legacy estable.
+
+3. Correo de bienvenida
+- Se entrega automaticamente al primer ingreso.
+- Expira en 3 dias por defecto.
+- El id configurable evita duplicados.
+- /mdvsocial mail welcome-test <jugador> permite probarlo sin alterar la marca de entrega.
+
+4. Validacion de titulos
+- Si el titulo equipado deja de estar desbloqueado o pierde su permiso, se reemplaza por aventurero.
+- Se valida al entrar y periodicamente.
+
+5. Titulos de castigo
+- /mdvsocial title punish <jugador> [titulo]
+- /mdvsocial title unpunish <jugador>
+- Mientras el castigo esta activo, el jugador no puede cambiar ni quitar el titulo.
+- pecador y esclavo son ejemplos editables en config.yml.
+
+6. Posicion configurable de rangos
+- Cada rango admite page y slot.
+- Los rangos sin slot siguen usando colocacion automatica.
+
+ELIMINADO
+- Se retiro por completo la reparacion de AnimatedScoreboard incorporada en 1.3.3.
+- No se incluye scoreboard-repair ni se ejecutan comandos de AnimatedScoreboard desde ese parche.
+
+ACTUALIZACION
+- Reemplaza el jar/source por 1.4.0.
+- Conserva tu config.yml actual y copia las secciones de CONFIG_UPDATE_1.4.0.yml, o usa config-1.4.0.yml como referencia completa.
+- Reinicia el servidor. Para registrar correctamente listeners y permisos no se recomienda usar PlugMan.
