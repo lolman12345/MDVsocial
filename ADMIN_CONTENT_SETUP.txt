@@ -1,0 +1,54 @@
+MDVCRAFT - ADMINISTRADOR DE CONTENIDO
+=====================================
+
+VERSIONES DEL PAQUETE
+- MDVSocial 1.4.1
+- MDVRecetas 0.6.12
+- MDVQuest 1.2.5
+
+FUNCIONES
+- /mdvadmin o /ma: menú central de administración.
+- /mdvitems: biblioteca segura de MMOItems por categorías.
+- Los objetos obtenidos son copias base sin tier/modificadores aleatorios.
+- La biblioteca no requiere ni concede mmoitems.admin.
+- /mdvrecetas editor: crea recetas nuevas, pero no abre el catálogo admin ni permite editar/eliminar recetas existentes.
+- /mdvquest admin: catálogo y editor visual de misiones, sin comandos técnicos de MDVQuest.
+
+PERMISOS RECOMENDADOS PARA admincontenido
+Ejecutar desde consola o con LuckPerms:
+
+/lp group admincontenido permission set mdvsocial.admin-menu true
+/lp group admincontenido permission set mdvsocial.item-browser true
+/lp group admincontenido permission set mdvrecetas.editor true
+/lp group admincontenido permission set mdvrecetas.admin false
+/lp group admincontenido permission set mdvquest.editor true
+/lp group admincontenido permission set mdvquest.admin false
+/lp group admincontenido permission set mdvquest.admin.force false
+/lp group admincontenido permission set mdvquest.admin.reroll false
+/lp group admincontenido permission set mmoitems.admin false
+/lp group admincontenido permission set mmocore.admin false
+
+PERMISOS ESSENTIALS DEL MENÚ PREDETERMINADO
+/lp group admincontenido permission set essentials.gamemode true
+/lp group admincontenido permission set essentials.gamemode.creative true
+/lp group admincontenido permission set essentials.gamemode.survival true
+/lp group admincontenido permission set essentials.gamemode.spectator true
+/lp group admincontenido permission set essentials.fly true
+/lp group admincontenido permission set essentials.god true
+
+CONFIGURACIÓN
+- El menú central se edita en plugins/MDVSocial/Menus/admin.yml.
+- Puede cambiarse completamente: título, tamaño, slots, materiales, nombres, lore, permisos, visibilidad, comandos y acciones.
+- Los comandos de los botones se ejecutan como el jugador, nunca como consola. LuckPerms continúa siendo la protección real.
+- El navegador se configura en mmoitems-browser dentro de config.yml.
+- Las extracciones se registran en consola y, por defecto, en plugins/MDVSocial/logs/item-browser.log.
+
+ACTUALIZACIÓN
+1. Compilar los tres proyectos con Java 21.
+2. Reemplazar los JAR con el servidor apagado.
+3. Iniciar el servidor; MDVSocial crea Menus/admin.yml automáticamente si no existe.
+4. Para personalizar el navegador, copiar CONFIG_UPDATE_1.4.1.yml al config.yml existente o adaptar solo las claves deseadas.
+5. No usar /reload del servidor. Reiniciar normalmente.
+
+DECISIÓN DE SEGURIDAD
+Para Valen es mejor mdvrecetas.editor que mdvrecetas.admin durante la primera etapa. Puede crear contenido nuevo, pero una equivocación no modifica ni elimina recetas ya publicadas. Más adelante se puede conceder mdvrecetas.admin si realmente necesita mantener recetas existentes.

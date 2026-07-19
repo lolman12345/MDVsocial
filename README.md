@@ -1,8 +1,14 @@
-# MDVSocial 1.4.0
+# MDVSocial 1.4.1
 
 Actualización 1.2.11: añade el item fijo del menú social en el slot 8 de la hotbar, configurable desde `social-menu-item`.
 
 Plugin social modular para MDVCRAFT.
+
+## MDVSocial 1.4.1
+
+- Menú central configurable `/mdvadmin` (alias `/ma`) desde `Menus/admin.yml`.
+- Biblioteca segura `/mdvitems` para obtener copias base de MMOItems por categoría, sin acceso al editor oficial.
+- Permisos por menú y por botón en los menús modulares.
 
 ## MDVSocial 1.4.0
 

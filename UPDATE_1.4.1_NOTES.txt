@@ -1,0 +1,20 @@
+MDVSocial 1.4.1
+================
+
+- Añade /mdvadmin (alias /ma), un menú administrativo central completamente editable desde Menus/admin.yml.
+- Los menús modulares ahora aceptan permiso a nivel de menú y por botón:
+    permission: permiso.nodo
+    hide-without-permission: true|false
+- Añade la acción OPEN_MMOITEMS_BROWSER para botones modulares.
+- Añade /mdvitems, una biblioteca segura y de solo extracción para MMOItems.
+- La biblioteca lista categorías y plantillas sin conceder mmoitems.admin.
+- Los objetos se construyen desde la plantilla base sin tier/modificadores aleatorios.
+- Clic izquierdo entrega 1; Shift + clic entrega hasta el stack configurado.
+- Nunca permite crear, editar, copiar, borrar ni recargar plantillas de MMOItems.
+- No arroja objetos al suelo cuando el inventario está lleno.
+- Registra extracciones en consola y opcionalmente en logs/item-browser.log.
+- Añade softdepend de MMOItems.
+
+Permisos nuevos:
+- mdvsocial.admin-menu
+- mdvsocial.item-browser

@@ -84,6 +84,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private Economy economy;
     private SocialMenuItemManager socialMenuItemManager;
     private PlayerHomesMenuManager playerHomesMenuManager;
+    private MMOItemsBrowserManager mmoItemsBrowserManager;
 
     private org.bukkit.NamespacedKey keyAction;
     private org.bukkit.NamespacedKey keyTitle;
@@ -102,6 +103,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
     private org.bukkit.NamespacedKey keyFriendTargetUuid;
     private org.bukkit.NamespacedKey keyFriendTargetName;
     private org.bukkit.NamespacedKey keyFriendTargetOnline;
+    private org.bukkit.NamespacedKey keyRequiredPermission;
 
     @Override
     public void onEnable() {
@@ -122,6 +124,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         keyFriendTargetUuid = new org.bukkit.NamespacedKey(this, "friend_target_uuid");
         keyFriendTargetName = new org.bukkit.NamespacedKey(this, "friend_target_name");
         keyFriendTargetOnline = new org.bukkit.NamespacedKey(this, "friend_target_online");
+        keyRequiredPermission = new org.bukkit.NamespacedKey(this, "required_permission");
 
         saveDefaultConfig();
         loadAll();
@@ -137,6 +140,8 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         getCommand("carta").setTabCompleter(this);
         getCommand("mdvsocial").setExecutor(this);
         getCommand("mdvsocial").setTabCompleter(this);
+        getCommand("mdvadmin").setExecutor(this);
+        getCommand("mdvitems").setExecutor(this);
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
             new MDVSocialExpansion(this).register();
@@ -159,8 +164,10 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         socialMenuItemManager.enable();
         playerHomesMenuManager = new PlayerHomesMenuManager(this);
         playerHomesMenuManager.enable();
+        mmoItemsBrowserManager = new MMOItemsBrowserManager(this);
+        mmoItemsBrowserManager.enable();
 
-        getLogger().info("MDVSocial 1.4.0 habilitado.");
+        getLogger().info("MDVSocial 1.4.1 habilitado.");
     }
 
     @Override
@@ -193,6 +200,7 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
         ensureDefaultMenus();
         loadCustomMenus();
         loadExternalGuiActions();
+        if (mmoItemsBrowserManager != null) mmoItemsBrowserManager.reload();
     }
 
     private void loadData() {
@@ -352,10 +360,46 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
             return true;
         }
 
+        if (cmd.equals("mdvadmin")) {
+            if (!(sender instanceof Player player)) {
+                msg(sender, "only-players");
+                return true;
+            }
+            openAdminMenu(player);
+            return true;
+        }
+
+        if (cmd.equals("mdvitems")) {
+            if (!(sender instanceof Player player)) {
+                msg(sender, "only-players");
+                return true;
+            }
+            if (mmoItemsBrowserManager == null) {
+                player.sendMessage(color(getPrefix() + "&cLa biblioteca de objetos no está disponible."));
+                return true;
+            }
+            mmoItemsBrowserManager.open(player);
+            return true;
+        }
+
         if (cmd.equals("mdvsocial")) {
             return handleAdminCommand(sender, args);
         }
         return false;
+    }
+
+    void openAdminMenu(Player player) {
+        String menu = normalize(getConfig().getString("admin-menu.menu", "admin"));
+        if (menu.isBlank()) menu = "admin";
+        if (!getConfig().getBoolean("admin-menu.enabled", true)) {
+            player.sendMessage(color(getPrefix() + "&cEl menú administrativo está desactivado."));
+            return;
+        }
+        openCustomMenu(player, menu, 1, "", 1);
+    }
+
+    void sendConfiguredMessage(CommandSender sender, String key) {
+        msg(sender, key);
     }
 
     private void handlePlayerTitleCommand(Player player, String[] args) {
@@ -739,6 +783,14 @@ public final class MDVSocialPlugin extends JavaPlugin implements Listener, Comma
                 Files.writeString(amigoOpciones.toPath(), defaultAmigoOpcionesMenuYaml(), StandardCharsets.UTF_8);
             } catch (IOException e) {
                 getLogger().warning("No se pudo crear Menus/amigo_opciones.yml: " + e.getMessage());
+            }
+        }
+        File admin = new File(folder, "admin.yml");
+        if (!admin.exists()) {
+            try {
+                Files.writeString(admin.toPath(), defaultAdminMenuYaml(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                getLogger().warning("No se pudo crear Menus/admin.yml: " + e.getMessage());
             }
         }
     }
@@ -1209,6 +1261,153 @@ items:
 """;
     }
 
+
+    private String defaultAdminMenuYaml() {
+        return """
+# ==========================================================
+# MDVSocial - Menú administrativo completamente configurable
+#
+# Cada botón puede usar:
+#   permission: permiso.necesario
+#   hide-without-permission: true/false
+#   action: COMMAND_PLAYER | OPEN_MENU | OPEN_MMOITEMS_BROWSER | CLOSE
+#   commands: lista de comandos ejecutados COMO EL JUGADOR
+# ==========================================================
+permission: mdvsocial.admin-menu
+title: '&8&lAdministración de MDVCRAFT'
+size: 54
+items:
+  misiones:
+    slot: 11
+    material: WRITABLE_BOOK
+    name: '&6&lMisiones'
+    lore:
+      - ''
+      - '&7Abre el catálogo y editor visual'
+      - '&7de misiones de MDVQuest.'
+      - ''
+      - '&8Comando: /mdvquest admin'
+      - '&eClic para abrir.'
+    permission: mdvquest.editor
+    hide-without-permission: true
+    action: COMMAND_PLAYER
+    commands:
+      - 'mdvquest admin'
+
+  recetas:
+    slot: 13
+    material: CRAFTING_TABLE
+    name: '&6&lCrear recetas'
+    lore:
+      - ''
+      - '&7Abre solamente el creador de recetas.'
+      - '&7No permite editar recetas existentes.'
+      - ''
+      - '&8Comando: /mdvrecetas editor'
+      - '&eClic para abrir.'
+    permission: mdvrecetas.editor
+    hide-without-permission: true
+    action: COMMAND_PLAYER
+    commands:
+      - 'mdvrecetas editor'
+
+  objetos:
+    slot: 15
+    material: CHEST
+    name: '&6&lBiblioteca de MMOItems'
+    lore:
+      - ''
+      - '&7Explora los objetos por categoría'
+      - '&7y obtiene copias base para pruebas.'
+      - ''
+      - '&cNo permite crear, editar ni eliminar.'
+      - '&eClic para abrir.'
+    permission: mdvsocial.item-browser
+    hide-without-permission: true
+    action: OPEN_MMOITEMS_BROWSER
+
+  creativo:
+    slot: 29
+    material: GRASS_BLOCK
+    name: '&aModo creativo'
+    lore:
+      - '&8Comando: /gmc'
+      - ''
+      - '&eClic para cambiar.'
+    permission: essentials.gamemode.creative
+    hide-without-permission: true
+    action: COMMAND_PLAYER
+    commands: ['gmc']
+
+  supervivencia:
+    slot: 31
+    material: IRON_SWORD
+    name: '&eModo supervivencia'
+    lore:
+      - '&8Comando: /gms'
+      - ''
+      - '&eClic para cambiar.'
+    permission: essentials.gamemode.survival
+    hide-without-permission: true
+    action: COMMAND_PLAYER
+    commands: ['gms']
+
+  espectador:
+    slot: 33
+    material: ENDER_EYE
+    name: '&bModo espectador'
+    lore:
+      - '&8Comando: /gmsp'
+      - ''
+      - '&eClic para cambiar.'
+    permission: essentials.gamemode.spectator
+    hide-without-permission: true
+    action: COMMAND_PLAYER
+    commands: ['gmsp']
+
+  vuelo:
+    slot: 38
+    material: FEATHER
+    name: '&fAlternar vuelo'
+    lore:
+      - '&8Comando: /fly'
+      - ''
+      - '&eClic para alternar.'
+    permission: essentials.fly
+    hide-without-permission: true
+    action: COMMAND_PLAYER
+    commands: ['fly']
+    close-on-click: false
+
+  invulnerabilidad:
+    slot: 40
+    material: TOTEM_OF_UNDYING
+    name: '&6Alternar invulnerabilidad'
+    lore:
+      - '&8Comando: /god'
+      - ''
+      - '&eClic para alternar.'
+    permission: essentials.god
+    hide-without-permission: true
+    action: COMMAND_PLAYER
+    commands: ['god']
+    close-on-click: false
+
+  volver:
+    slot: 49
+    material: ARROW
+    name: '&eVolver al menú social'
+    action: COMMAND_PLAYER
+    commands: ['social']
+
+  cerrar:
+    slot: 53
+    material: BARRIER
+    name: '&cCerrar'
+    action: CLOSE
+""";
+    }
+
     private void loadCustomMenus() {
         customMenus.clear();
         File folder = new File(getDataFolder(), "Menus");
@@ -1270,7 +1469,8 @@ items:
     private CustomMenuDef parseCustomMenu(String id, YamlConfiguration yaml) {
         String title = yaml.getString("title", "&8" + id);
         int size = normalizeMenuSize(yaml.getInt("size", 27));
-        CustomMenuDef def = new CustomMenuDef(id, title, size);
+        String permission = yaml.getString("permission", "");
+        CustomMenuDef def = new CustomMenuDef(id, title, size, permission);
 
         ConfigurationSection pagesSec = yaml.getConfigurationSection("pages");
         if (pagesSec != null) {
@@ -1369,6 +1569,8 @@ items:
                     normalize(sec.getString("false-menu", sec.getString("menu-false", ""))),
                     normalize(sec.getString("clans-menu", sec.getString("mdvclans-menu", target))),
                     sec.getString("sound", sec.getString("click-sound", "")),
+                    sec.getString("permission", ""),
+                    sec.getBoolean("hide-without-permission", sec.getBoolean("hide-no-permission", true)),
                     sec.getBoolean("use-clan-banner", sec.getBoolean("dynamic-clan-banner", false))
             );
             items.add(item);
@@ -1386,6 +1588,7 @@ items:
             case "PREV_PAGE", "PREVIOUS", "PREVIOUS_PAGE" -> "PREVIOUS_PAGE";
             case "NEXT", "NEXT_PAGE" -> "NEXT_PAGE";
             case "OPEN_TITLE", "OPEN_TITLES", "TITLES" -> "OPEN_TITLES";
+            case "OPEN_MMOITEMS_BROWSER", "MMOITEMS_BROWSER", "OPEN_ITEM_BROWSER", "ITEM_BROWSER" -> "OPEN_MMOITEMS_BROWSER";
             case "OPEN_MAIL", "OPEN_MAILBOX", "MAILBOX", "BUZON" -> "OPEN_MAILBOX";
             case "START_MAIL", "START_MAIL_SEND", "SEND_MAIL", "ENVIAR_CARTA" -> "START_MAIL_SEND";
             case "START_MAIL_TARGET", "START_MAIL_SEND_TARGET", "SEND_MAIL_TARGET", "ENVIAR_CARTA_TARGET", "ENVIAR_CARTA_AMIGO" -> "START_MAIL_SEND_TARGET";
@@ -1414,6 +1617,10 @@ items:
             player.sendMessage(color(getPrefix() + "&cEse menu no existe: &e" + menuId));
             return;
         }
+        if (!def.permission.isBlank() && !player.hasPermission(def.permission)) {
+            msg(player, "no-permission");
+            return;
+        }
         int maxPage = def.maxPage();
         page = Math.max(1, Math.min(page, maxPage));
         MenuHolder holder = new MenuHolder("CUSTOM_MENU", page, menuId, previousMenu == null ? "" : normalize(previousMenu), previousPage <= 0 ? 1 : previousPage, targetUuid, targetName, targetOnline);
@@ -1424,6 +1631,7 @@ items:
         List<CustomMenuItem> items = def.pages.getOrDefault(page, Collections.emptyList());
         for (CustomMenuItem menuItem : items) {
             if (!menuItem.isVisible(targetUuid, targetOnline)) continue;
+            if (!menuItem.permission.isBlank() && !player.hasPermission(menuItem.permission) && menuItem.hideWithoutPermission) continue;
             if (menuItem.slot >= 0 && menuItem.slot < inv.getSize()) inv.setItem(menuItem.slot, customMenuItemStack(player, menuItem, targetUuid, targetName, targetOnline));
         }
         player.openInventory(inv);
@@ -1468,6 +1676,7 @@ items:
         meta.getPersistentDataContainer().set(keyFriendTargetOnline, PersistentDataType.STRING, String.valueOf(targetOnline));
         if (!def.commands.isEmpty()) meta.getPersistentDataContainer().set(keyCommands, PersistentDataType.STRING, String.join("\n", def.commands));
         if (def.sound != null && !def.sound.isBlank()) meta.getPersistentDataContainer().set(keySound, PersistentDataType.STRING, def.sound);
+        if (def.permission != null && !def.permission.isBlank()) meta.getPersistentDataContainer().set(keyRequiredPermission, PersistentDataType.STRING, def.permission);
         meta.getPersistentDataContainer().set(keyCloseOnClick, PersistentDataType.STRING, String.valueOf(def.closeOnClick));
         item.setItemMeta(meta);
         return item;
@@ -3262,6 +3471,7 @@ items:
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (mmoItemsBrowserManager != null && mmoItemsBrowserManager.isBrowserInventory(event.getView().getTopInventory())) return;
         if (!(event.getInventory().getHolder() instanceof MenuHolder holder)) {
             if (handleExternalFriendOptionsClick(event, player)) return;
             handleExternalGuiClick(event, player);
@@ -3274,6 +3484,12 @@ items:
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         String action = pdc.get(keyAction, PersistentDataType.STRING);
         if (action == null || action.isBlank()) return;
+        String requiredPermission = pdc.get(keyRequiredPermission, PersistentDataType.STRING);
+        if (requiredPermission != null && !requiredPermission.isBlank() && !player.hasPermission(requiredPermission)) {
+            msg(player, "no-permission");
+            playButtonSound(player, "invalid", pdc);
+            return;
+        }
         playButtonSound(player, action, pdc);
 
         switch (action) {
@@ -3309,6 +3525,10 @@ items:
             }
             case "COMMAND_PLAYER" -> runPlayerCommandsFromPdc(player, pdc, holder);
             case "OPEN_MAILBOX" -> openMailbox(player, 0);
+            case "OPEN_MMOITEMS_BROWSER" -> {
+                if (mmoItemsBrowserManager == null) player.sendMessage(color(getPrefix() + "&cLa biblioteca de objetos no está disponible."));
+                else mmoItemsBrowserManager.open(player);
+            }
             case "START_MAIL_SEND" -> {
                 if (shouldCloseOnClick(pdc)) player.closeInventory();
                 startMailRecipientPrompt(player, holder.menuId.isBlank() ? "correo" : holder.menuId, holder.page);
@@ -4241,11 +4461,13 @@ items:
         final String id;
         final String title;
         final int size;
+        final String permission;
         final Map<Integer, List<CustomMenuItem>> pages = new HashMap<>();
-        CustomMenuDef(String id, String title, int size) {
+        CustomMenuDef(String id, String title, int size, String permission) {
             this.id = id;
             this.title = title;
             this.size = size;
+            this.permission = permission == null ? "" : permission.trim();
         }
         int maxPage() {
             if (pages.isEmpty()) return 1;
@@ -4273,9 +4495,11 @@ items:
         final String falseMenu;
         final String clansMenu;
         final String sound;
+        final String permission;
+        final boolean hideWithoutPermission;
         final boolean useClanBanner;
 
-        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen, String conditionPlaceholder, String conditionEquals, String trueMenu, String falseMenu, String clansMenu, String sound, boolean useClanBanner) {
+        CustomMenuItem(String id, int slot, String material, int amount, String name, List<String> lore, String headOwner, String texture, String action, String targetMenu, List<String> commands, boolean closeOnClick, String visibleWhen, String conditionPlaceholder, String conditionEquals, String trueMenu, String falseMenu, String clansMenu, String sound, String permission, boolean hideWithoutPermission, boolean useClanBanner) {
             this.id = id;
             this.slot = slot;
             this.material = material == null ? "PAPER" : material;
@@ -4295,6 +4519,8 @@ items:
             this.falseMenu = falseMenu == null ? "" : falseMenu;
             this.clansMenu = clansMenu == null ? "" : clansMenu;
             this.sound = sound == null ? "" : sound;
+            this.permission = permission == null ? "" : permission.trim();
+            this.hideWithoutPermission = hideWithoutPermission;
             this.useClanBanner = useClanBanner;
         }
 

@@ -1,0 +1,77 @@
+# Añadir estas secciones al config.yml existente de MDVSocial.
+# No es obligatorio para arrancar: el plugin incluye valores por defecto.
+
+admin-menu:
+  enabled: true
+  menu: admin
+
+mmoitems-browser:
+  enabled: true
+  permission: mdvsocial.item-browser
+  debug: false
+  menu-size: 54
+
+  titles:
+    types: '&8&lBiblioteca de MMOItems &7({page}/{max_page})'
+    items: '&8&l{type} &7({page}/{max_page})'
+
+  content-slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43]
+
+  type-order:
+    - MATERIAL
+    - CONSUMABLE
+    - SWORD
+    - DAGGER
+    - SPEAR
+    - HAMMER
+    - BOW
+    - CROSSBOW
+    - ARMOR
+    - TOOL
+
+  excluded-types: []
+  # Formato TYPE:ID
+  excluded-items: []
+
+  # Ejemplo:
+  # type-overrides:
+  #   MATERIAL:
+  #     name: '&aMateriales'
+  #     material: CHEST
+  type-overrides: {}
+
+  fill:
+    enabled: true
+    material: BLACK_STAINED_GLASS_PANE
+
+  navigation:
+    previous-slot: 45
+    back-slot: 49
+    next-slot: 53
+    close-slot: -1
+    previous-name: '&ePágina anterior'
+    next-name: '&aPágina siguiente'
+    back-admin-name: '&6Volver a administración'
+    back-types-name: '&6Volver a categorías'
+    close-name: '&cCerrar'
+    previous-material: ARROW
+    next-material: ARROW
+    back-material: ARROW
+    close-material: BARRIER
+
+  extraction:
+    shift-click-enabled: true
+    shift-click-amount: 64
+
+  logging:
+    console: true
+    file: true
+
+  messages:
+    received: '&aObtuviste &e{amount}x &f{type}:{id} &asin modificadores aleatorios.'
+    inventory-full: '&cNo tienes espacio suficiente en el inventario.'
+    mmoitems-missing: '&cMMOItems no está disponible.'
+    disabled: '&cLa biblioteca de objetos está desactivada.'
+    empty-type: '&cNo se encontraron objetos en esa categoría.'
+    item-not-found: '&cEse objeto ya no está disponible.'
+    item-build-failed: '&cNo se pudo generar ese objeto.'

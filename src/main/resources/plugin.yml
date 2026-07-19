@@ -1,9 +1,9 @@
 name: MDVSocial
-version: 1.4.0
+version: 1.4.1
 main: com.mdvcraft.mdvsocial.MDVSocialPlugin
 api-version: '1.21'
 author: MDVCRAFT
-softdepend: [PlaceholderAPI, Vault, LuckPerms, MMOCore, Essentials, MDVClans]
+softdepend: [PlaceholderAPI, Vault, LuckPerms, MMOCore, MMOItems, Essentials, MDVClans]
 commands:
   social:
     description: Abre el menu social de MDVCRAFT.
@@ -28,12 +28,26 @@ commands:
     description: Abre el menu de casas personales.
     usage: /casa
     aliases: [casas, hogar, hogares]
+  mdvadmin:
+    description: Abre el menu central de administracion.
+    usage: /mdvadmin
+    aliases: [ma]
+  mdvitems:
+    description: Abre la biblioteca segura de MMOItems.
+    usage: /mdvitems
+    aliases: [itemsstaff, bibliotecaitems]
 permissions:
   mdvsocial.use:
     description: Permite usar /social y /titulos.
     default: true
   mdvsocial.admin:
     description: Permite administrar MDVSocial.
+    default: op
+  mdvsocial.admin-menu:
+    description: Permite abrir el menu central de administracion.
+    default: op
+  mdvsocial.item-browser:
+    description: Permite usar la biblioteca segura de MMOItems.
     default: op
 
   mdvsocial.mail.use:
